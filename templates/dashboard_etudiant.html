@@ -17,10 +17,11 @@
         <ul class="nav-menu">
             <li><a href="{% url 'dashboard_etudiant' %}" class="nav-link active">📊 Tableau de Bord</a></li>
             <li><a href="{% url 'mes_notes' %}" class="nav-link">📈 Mes notes </a></li>
-            <li><a href="#" class="nav-link">📝 Mon Planning</a></li>
-            <li><a href="#" class="nav-link">📅 Mon niveau</a></li>
+            <li><a href="{% url 'mon_planning' %}" class="nav-link">📝 Mon Planning</a></li>
+            <li><a href="{% url 'mon_niveau' %}" class="nav-link">📅 Mon niveau</a></li>
             <li><a href="{% url 'mes_ressources' %}" class="nav-link">📚 Ressources</a></li>
             <li><a href="{% url 'messagerie_etudiant' %}" class="nav-link">💬 Messagerie</a></li>
+            <li><a href="{% url 'profil' %}" class="nav-link">👤 Mon Profil</a></li>
             <li><a href="#" class="nav-link">⚙️ Paramètres</a></li>
         </ul>
 
@@ -196,6 +197,7 @@
             </div>
         </div>
     </main>
+    
 
     <script src="{% static 'js/dash_etu.js' %}"></script>
 </body>

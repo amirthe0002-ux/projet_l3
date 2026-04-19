@@ -134,6 +134,11 @@ urlpatterns = [
     # ============================================================
     path('audit/', views.AuditListView.as_view(), name='audit_list'),
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
+
+    # ============================================================
+    # UTILISATEUR DETAIL (admin field updates)
+    # ============================================================
+    #path('utilisateurs/<int:pk>/', views.UtilisateurDetailView.as_view(), name='user_detail'),
 ]
 
 # ✅ Add static/media ONLY in debug

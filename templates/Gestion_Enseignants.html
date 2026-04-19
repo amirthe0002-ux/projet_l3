@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Enseignants - Secrétaire</title>
+ 
+   <link rel="stylesheet" href="{% static 'css/Gestion Enseignants.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-chalkboard-teacher"></i> Gestion des Enseignants</h1>
+            <button class="btn-primary">
+                <i class="fas fa-plus"></i> Nouvel Enseignant
+            </button>
+        </div>
+
+        <div class="teachers-grid">
+            <!-- Teacher 1 -->
+            <div class="teacher-card">
+                <div class="card-header">
+                    <div class="teacher-profile">
+                        <div class="teacher-avatar">AB</div>
+                        <div class="teacher-info">
+                            <h3>Ahmed Benali</h3>
+                            <p>Professeur d'Anglais</p>
+                        </div>
+                    </div>
+                    <span class="teacher-badge">CDI</span>
+                </div>
+                <div class="card-body">
+                    <div class="stats-row">
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">4</div>
+                            <div class="mini-stat-label">Groupes</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">48</div>
+                            <div class="mini-stat-label">Étudiants</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">24h</div>
+                            <div class="mini-stat-label">Semaine</div>
+                        </div>
+                    </div>
+
+                    <div class="details-list">
+                        <div class="detail-item">
+                            <span class="detail-label">Email</span>
+                            <span class="detail-value">a.benali@centre.com</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Téléphone</span>
+                            <span class="detail-value">0550 11 22 33</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Qualification</span>
+                            <span class="detail-value">Master Linguistique</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Date début</span>
+                            <span class="detail-value">01/09/2023</span>
+                        </div>
+                    </div>
+
+                    <div class="salary-info">
+                        <div class="salary-header">
+                            <h4>Salaire Mensuel</h4>
+                            <i class="fas fa-money-bill-wave" style="color: #059669;"></i>
+                        </div>
+                        <div class="salary-amount">45,000 DA</div>
+                        <p style="color: #065f46; font-size: 0.875rem; margin-top: 0.5rem;">
+                            <i class="fas fa-clock"></i> 24h × 1,875 DA/h
+                        </p>
+                    </div>
+
+                    <div class="card-actions">
+                        <button class="btn-action btn-edit">
+                            <i class="fas fa-edit"></i> Modifier
+                        </button>
+                        <button class="btn-action btn-pay">
+                            <i class="fas fa-file-invoice-dollar"></i> Bulletin
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teacher 2 -->
+            <div class="teacher-card">
+                <div class="card-header" style="background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);">
+                    <div class="teacher-profile">
+                        <div class="teacher-avatar">MD</div>
+                        <div class="teacher-info">
+                            <h3>Marie Dupont</h3>
+                            <p>Professeure de Français</p>
+                        </div>
+                    </div>
+                    <span class="teacher-badge">CDD</span>
+                </div>
+                <div class="card-body">
+                    <div class="stats-row">
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">3</div>
+                            <div class="mini-stat-label">Groupes</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">36</div>
+                            <div class="mini-stat-label">Étudiants</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">18h</div>
+                            <div class="mini-stat-label">Semaine</div>
+                        </div>
+                    </div>
+
+                    <div class="details-list">
+                        <div class="detail-item">
+                            <span class="detail-label">Email</span>
+                            <span class="detail-value">m.dupont@centre.com</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Téléphone</span>
+                            <span class="detail-value">0661 22 33 44</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Qualification</span>
+                            <span class="detail-value">Doctorat FLE</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Date début</span>
+                            <span class="detail-value">15/01/2024</span>
+                        </div>
+                    </div>
+
+                    <div class="salary-info" style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%);">
+                        <div class="salary-header">
+                            <h4 style="color: #6b21a8;">Salaire Mensuel</h4>
+                            <i class="fas fa-money-bill-wave" style="color: #7c3aed;"></i>
+                        </div>
+                        <div class="salary-amount" style="color: #7c3aed;">40,500 DA</div>
+                        <p style="color: #6b21a8; font-size: 0.875rem; margin-top: 0.5rem;">
+                            <i class="fas fa-clock"></i> 18h × 2,250 DA/h
+                        </p>
+                    </div>
+
+                    <div class="card-actions">
+                        <button class="btn-action btn-edit">
+                            <i class="fas fa-edit"></i> Modifier
+                        </button>
+                        <button class="btn-action btn-pay" style="background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);">
+                            <i class="fas fa-file-invoice-dollar"></i> Bulletin
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teacher 3 -->
+            <div class="teacher-card">
+                <div class="card-header" style="background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
+                    <div class="teacher-profile">
+                        <div class="teacher-avatar">TK</div>
+                        <div class="teacher-info">
+                            <h3>Thomas Klein</h3>
+                            <p>Professeur d'Allemand</p>
+                        </div>
+                    </div>
+                    <span class="teacher-badge">Vacataire</span>
+                </div>
+                <div class="card-body">
+                    <div class="stats-row">
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">2</div>
+                            <div class="mini-stat-label">Groupes</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">20</div>
+                            <div class="mini-stat-label">Étudiants</div>
+                        </div>
+                        <div class="mini-stat">
+                            <div class="mini-stat-value">12h</div>
+                            <div class="mini-stat-label">Semaine</div>
+                        </div>
+                    </div>
+
+                    <div class="details-list">
+                        <div class="detail-item">
+                            <span class="detail-label">Email</span>
+                            <span class="detail-value">t.klein@centre.com</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Téléphone</span>
+                            <span class="detail-value">0772 33 44 55</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Qualification</span>
+                            <span class="detail-value">Master Allemand</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Date début</span>
+                            <span class="detail-value">01/10/2024</span>
+                        </div>
+                    </div>
+
+                    <div class="salary-info">
+                        <div class="salary-header">
+                            <h4>Salaire Mensuel</h4>
+                            <i class="fas fa-money-bill-wave" style="color: #059669;"></i>
+                        </div>
+                        <div class="salary-amount">30,000 DA</div>
+                        <p style="color: #065f46; font-size: 0.875rem; margin-top: 0.5rem;">
+                            <i class="fas fa-clock"></i> 12h × 2,500 DA/h
+                        </p>
+                    </div>
+
+                    <div class="card-actions">
+                        <button class="btn-action btn-edit">
+                            <i class="fas fa-edit"></i> Modifier
+                        </button>
+                        <button class="btn-action btn-pay">
+                            <i class="fas fa-file-invoice-dollar"></i> Bulletin
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+  <script src="{% static 'js/Gestion_ens.js' %}"></script>
+</html>

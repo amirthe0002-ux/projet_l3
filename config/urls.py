@@ -26,6 +26,7 @@ from api.views import (
     planning_view,
     parents_view,
     inscriptions_view,
+    salaires_view,
 
     # Comptable (+ Secrétariat hérite)
     dashboard_comptable,
@@ -34,7 +35,7 @@ from api.views import (
     bulletins_view,
     bulletin_detail_view,
     situation_financiere_view,
-
+    parametres_view,
     # Dirigeant
     dashboard_dirigeant,
     parametres_view,
@@ -85,7 +86,7 @@ urlpatterns = [
 
     # ============================================================
     # SECRÉTARIAT
-    # ============================================================
+    # ============================================================0
     path('dashboard/secretariat/',                     dashboard_secretariat,   name='dashboard_secretariat'),
     path('secretariat/etudiants/',           etudiants_view,          name='etudiants'),
     path('secretariat/etudiants/<int:pk>/',  etudiant_detail_view,    name='etudiant_detail'),
@@ -96,6 +97,7 @@ urlpatterns = [
     path('secretariat/planning/',            planning_view,           name='planning'),
     path('secretariat/parents/',             parents_view,            name='parents'),
     path('secretariat/inscriptions/',        inscriptions_view,       name='inscriptions'),
+     path('secretariat/salaires/',                salaires_view,            name='salaires'),
 
 
     path('comptable/',                          dashboard_comptable,       name='dashboard_comptable'),
@@ -128,6 +130,7 @@ urlpatterns = [
     path('etudiant/niveau/',             mon_niveau_view,     name='mon_niveau'),
     path('etudiant/ressources/',         mes_ressources_view, name='mes_ressources'),
     path('etudiant/messagerie/',     messagerie_etudiant_view, name='messagerie_etudiant'),
+    
 
 
     path('parent/',                      dashboard_parent,         name='dashboard_parent'),

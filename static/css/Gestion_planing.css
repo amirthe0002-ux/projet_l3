@@ -1,0 +1,664 @@
+/* ============================================
+   CSS VARIABLES & THEME - Matching Factures
+   ============================================ */
+:root {
+    --primary: #6366f1;
+    --primary-dark: #4f46e5;
+    --primary-light: #818cf8;
+    --secondary: #ec4899;
+    --secondary-light: #f472b6;
+    --accent: #0ea5e9;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    
+    --glass-bg: rgba(255, 255, 255, 0.08);
+    --glass-border: rgba(255, 255, 255, 0.18);
+    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    
+    --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    
+    --radius: 16px;
+    --radius-lg: 24px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    background: #0f172a;
+    color: #fff;
+    overflow-x: hidden;
+    line-height: 1.6;
+}
+
+/* ============================================
+   ANIMATED BACKGROUND
+   ============================================ */
+.bg-animation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.bg-gradient {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.25) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(236, 72, 153, 0.2) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(14, 165, 233, 0.15) 0%, transparent 70%),
+        linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+    background-size: 200% 200%;
+    animation: gradientShift 20s ease infinite;
+}
+
+@keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.floating-shapes {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+}
+
+.shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.3;
+    animation: float 25s infinite ease-in-out;
+}
+
+.shape-1 { 
+    width: 400px; 
+    height: 400px; 
+    background: var(--primary); 
+    top: -10%; 
+    left: -10%; 
+    animation-delay: 0s; 
+}
+
+.shape-2 { 
+    width: 300px; 
+    height: 300px; 
+    background: var(--secondary); 
+    bottom: -5%; 
+    right: -5%; 
+    animation-delay: -8s; 
+}
+
+.shape-3 { 
+    width: 250px; 
+    height: 250px; 
+    background: var(--accent); 
+    top: 40%; 
+    left: 60%; 
+    animation-delay: -16s; 
+}
+
+@keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+    33% { transform: translate(30px, -30px) scale(1.1) rotate(120deg); }
+    66% { transform: translate(-20px, 20px) scale(0.9) rotate(240deg); }
+}
+
+/* ============================================
+   LAYOUT CONTAINER
+   ============================================ */
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+}
+
+/* ============================================
+   HEADER - Glassmorphism Style
+   ============================================ */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1.5rem 2rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-shadow);
+    animation: fadeInUp 0.5s ease;
+}
+
+.header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header h1 i {
+    font-size: 2rem;
+    color: var(--primary-light);
+    -webkit-text-fill-color: var(--primary-light);
+}
+
+.header-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+/* ============================================
+   BUTTONS - Matching Factures Style
+   ============================================ */
+.btn {
+    padding: 0.875rem 1.5rem;
+    border: none;
+    border-radius: var(--radius);
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    text-decoration: none;
+    font-family: inherit;
+}
+
+.btn-primary {
+    background: var(--gradient-1);
+    color: white;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.6);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+    border-color: var(--primary-light);
+}
+
+.btn-icon {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: var(--radius);
+}
+
+/* ============================================
+   CALENDAR CONTAINER - Glassmorphism
+   ============================================ */
+.calendar-container {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-shadow);
+    overflow: hidden;
+    animation: fadeInUp 0.5s ease 0.1s both;
+}
+
+/* ============================================
+   CALENDAR HEADER
+   ============================================ */
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    background: rgba(15, 23, 42, 0.6);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.calendar-nav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.calendar-nav h2 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.nav-btn {
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    border: 1px solid var(--glass-border);
+}
+
+.nav-btn:hover {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: var(--primary-light);
+    transform: scale(1.1);
+}
+
+.view-toggle {
+    display: flex;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.5rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--glass-border);
+}
+
+.view-btn {
+    padding: 0.625rem 1.25rem;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition);
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
+.view-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.view-btn.active {
+    background: var(--gradient-1);
+    color: white;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+}
+
+/* ============================================
+   WEEK VIEW GRID
+   ============================================ */
+.week-view {
+    display: grid;
+    grid-template-columns: 80px repeat(5, 1fr);
+    gap: 1px;
+    background: var(--glass-border);
+}
+
+.time-column {
+    background: rgba(15, 23, 42, 0.4);
+}
+
+.time-slot-header {
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: #94a3b8;
+    border-bottom: 1px solid var(--glass-border);
+    font-size: 0.85rem;
+}
+
+.day-column {
+    background: rgba(15, 23, 42, 0.3);
+    transition: var(--transition);
+}
+
+.day-column:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.day-header {
+    height: 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.6);
+    border-bottom: 1px solid var(--glass-border);
+    font-weight: 700;
+    color: white;
+    font-size: 1rem;
+    transition: var(--transition);
+}
+
+.day-header span {
+    font-size: 0.875rem;
+    color: #94a3b8;
+    font-weight: 500;
+    margin-top: 0.25rem;
+}
+
+.day-header.today {
+    background: var(--gradient-1);
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.day-header.today::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+    transform: rotate(45deg);
+    animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+    100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+}
+
+.day-header.today span {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.schedule-slot {
+    height: 100px;
+    border-bottom: 1px solid var(--glass-border);
+    position: relative;
+    transition: var(--transition);
+}
+
+.schedule-slot:hover {
+    background: rgba(99, 102, 241, 0.05);
+}
+
+/* ============================================
+   SESSION CARDS - Glassmorphism Style
+   ============================================ */
+.session {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    top: 4px;
+    bottom: 4px;
+    padding: 0.75rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: var(--transition);
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.session:hover {
+    transform: translateY(-2px) scale(1.02);
+    z-index: 10;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+/* Language Colors with Glass Effect */
+.session.anglais {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border-left: 4px solid #3b82f6;
+}
+
+.session.francais {
+    background: rgba(236, 72, 153, 0.2);
+    color: #f472b6;
+    border-left: 4px solid #ec4899;
+}
+
+.session.allemand {
+    background: rgba(168, 85, 247, 0.2);
+    color: #a78bfa;
+    border-left: 4px solid #a855f7;
+}
+
+.session.espagnol {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border-left: 4px solid #f59e0b;
+}
+
+.session.italien {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border-left: 4px solid #10b981;
+}
+
+.session-time {
+    font-weight: 700;
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.session-group {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.session-room {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Conflict Indicator */
+.conflict-indicator {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: var(--danger);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* Add Session Button in Empty Slots */
+.add-session-btn {
+    position: absolute;
+    inset: 4px;
+    border: 2px dashed rgba(99, 102, 241, 0.3);
+    border-radius: 12px;
+    background: transparent;
+    color: rgba(99, 102, 241, 0.5);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: var(--transition);
+    font-size: 1.5rem;
+}
+
+.schedule-slot:hover .add-session-btn {
+    opacity: 1;
+}
+
+.add-session-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* ============================================
+   CALENDAR LEGEND
+   ============================================ */
+.calendar-legend {
+    display: flex;
+    gap: 2rem;
+    padding: 1.5rem 2rem;
+    background: rgba(15, 23, 42, 0.6);
+    border-top: 1px solid var(--glass-border);
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    color: #cbd5e1;
+    font-weight: 500;
+}
+
+.legend-color {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+@keyframes fadeInUp {
+    from { 
+        opacity: 0; 
+        transform: translateY(20px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+
+.animate-in {
+    animation: fadeInUp 0.5s ease forwards;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+@media (max-width: 1024px) {
+    .week-view {
+        overflow-x: auto;
+        display: flex;
+        gap: 1px;
+    }
+    
+    .time-column,
+    .day-column {
+        min-width: 200px;
+        flex-shrink: 0;
+    }
+    
+    .calendar-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+    
+    .header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .header-actions {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .btn {
+        padding: 0.75rem 1rem;
+        font-size: 0.85rem;
+    }
+    
+    .calendar-nav h2 {
+        font-size: 1rem;
+    }
+    
+    .view-toggle {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .calendar-legend {
+        justify-content: center;
+        gap: 1rem;
+    }
+}
+
+/* ============================================
+   SCROLLBAR STYLING
+   ============================================ */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-light);
+}

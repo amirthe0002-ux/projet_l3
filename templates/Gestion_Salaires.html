@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Salaires - Dirigeant</title>
+     <link rel="stylesheet" href="{% static 'css/Gestion_Paiements.css' %}">
+    
+   </head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
+                <div>
+                    <div style="font-weight: 700;">LanguePro</div>
+                    <div style="font-size: 0.75rem; color: #64748b;">Dirigeant</div>
+                </div>
+            </div>
+            <nav>
+                <a href="{% url 'dashboard_secretariat' %}" class="nav-item"><i class="fas fa-chart-line"></i><span>Tableau de Bord</span></a>
+                <a href="{% url 'paiements'%}" class="nav-item"><i class="fas fa-wallet"></i><span>Paiements</span></a>
+                <a href="{% url 'salaires' %}" class="nav-item active"><i class="fas fa-money-bill-wave"></i><span>Salaires</span></a>
+            </nav>
+        </aside>
+
+        <main class="main">
+            <div class="header">
+                <h1>Gestion des Salaires</h1>
+                <button class="btn btn-primary">
+                    <i class="fas fa-calculator"></i>
+                    Calculer tous les salaires
+                </button>
+            </div>
+
+            <div class="month-selector">
+                <button><i class="fas fa-chevron-left"></i></button>
+                <h2>Mars 2024</h2>
+                <button><i class="fas fa-chevron-right"></i></button>
+            </div>
+
+            <div class="summary-section">
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <h3>Total Heures</h3>
+                        <p>1,840h</p>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Total Brut</h3>
+                        <p>425,600 DH</p>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Total Déductions</h3>
+                        <p>63,840 DH</p>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Total Net</h3>
+                        <p>361,760 DH</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-bar">
+                <div class="stat-box">
+                    <h4>Enseignants payés</h4>
+                    <p style="color: #10b981;">38/42</p>
+                </div>
+                <div class="stat-box">
+                    <h4>En attente</h4>
+                    <p style="color: #f59e0b;">4</p>
+                </div>
+                <div class="stat-box">
+                    <h4>Heures supplémentaires</h4>
+                    <p>120h</p>
+                </div>
+                <div class="stat-box">
+                    <h4>Congés non payés</h4>
+                    <p>3</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Enseignant</th>
+                            <th>Tarif/H</th>
+                            <th>Heures</th>
+                            <th>Brut</th>
+                            <th>Déductions</th>
+                            <th>Net</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <div class="teacher-info">
+                                    <div class="teacher-avatar" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6);">AM</div>
+                                    <div>
+                                        <div style="font-weight: 600;">Ahmed Moussaoui</div>
+                                        <div style="font-size: 0.8rem; opacity: 0.7;">Anglais</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>250 DH</td>
+                            <td><input type="number" class="hours-input" value="48"></td>
+                            <td class="amount">12,000 DH</td>
+                            <td class="deductions">-1,800 DH</td>
+                            <td class="amount total">10,200 DH</td>
+                            <td><span class="status-badge status-paid">Payé</span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <button class="action-btn payslip"><i class="fas fa-file-pdf"></i> Bulletin</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="teacher-info">
+                                    <div class="teacher-avatar" style="background: linear-gradient(135deg, #ec4899, #f472b6);">SB</div>
+                                    <div>
+                                        <div style="font-weight: 600;">Sofia Benali</div>
+                                        <div style="font-size: 0.8rem; opacity: 0.7;">Français</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>280 DH</td>
+                            <td><input type="number" class="hours-input" value="36"></td>
+                            <td class="amount">10,080 DH</td>
+                            <td class="deductions">-1,512 DH</td>
+                            <td class="amount total">8,568 DH</td>
+                            <td><span class="status-badge status-paid">Payé</span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <button class="action-btn payslip"><i class="fas fa-file-pdf"></i> Bulletin</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="teacher-info">
+                                    <div class="teacher-avatar" style="background: linear-gradient(135deg, #f59e0b, #fbbf24);">YK</div>
+                                    <div>
+                                        <div style="font-weight: 600;">Youssef Kadiri</div>
+                                        <div style="font-size: 0.8rem; opacity: 0.7;">Espagnol</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>220 DH</td>
+                            <td><input type="number" class="hours-input" value="0"></td>
+                            <td class="amount">0 DH</td>
+                            <td class="deductions">-</td>
+                            <td class="amount total">0 DH</td>
+                            <td><span class="status-badge status-pending">En congé</span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <button class="action-btn pay"><i class="fas fa-money-bill-wave"></i> Payer</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="teacher-info">
+                                    <div class="teacher-avatar" style="background: linear-gradient(135deg, #10b981, #34d399);">LB</div>
+                                    <div>
+                                        <div style="font-weight: 600;">Laila Bennani</div>
+                                        <div style="font-size: 0.8rem; opacity: 0.7;">Anglais</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>300 DH</td>
+                            <td><input type="number" class="hours-input" value="60"></td>
+                            <td class="amount">18,000 DH</td>
+                            <td class="deductions">-2,700 DH</td>
+                            <td class="amount total">15,300 DH</td>
+                            <td><span class="status-badge status-pending">En attente</span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <button class="action-btn pay"><i class="fas fa-money-bill-wave"></i> Payer</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</body>
+<script src="{% static 'js/Gestion_Salaires.js' %}"></script>
+</html>
