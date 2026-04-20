@@ -71,7 +71,7 @@ from api.views import (
     notifications_view,
     messagerie_view,
 )
-
+#S
 
 admin.site.site_header = 'admin panel'
 urlpatterns = [

@@ -43,7 +43,7 @@ urlpatterns = [
     # ============================================================
     path('enseignants/', views.EnseignantListCreateView.as_view(), name='enseignant_list'),
     path('enseignants/<int:pk>/', views.EnseignantDetailView.as_view(), name='enseignant_detail'),
-
+#S
     # ============================================================
     # SECRÉTARIAT — Parents
     # ============================================================

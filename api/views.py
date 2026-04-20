@@ -147,7 +147,7 @@ def dashboard_secretariat(request):
         'page': 'dashboard',
     })
 
-
+#s
 
 def etudiants_view(request):
     """Page gestion des étudiants"""

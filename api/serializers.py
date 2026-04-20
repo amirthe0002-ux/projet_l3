@@ -673,7 +673,7 @@ class RessourceSerializer(serializers.ModelSerializer):
             'date_creation', 'date_modification',
         ]
         read_only_fields = ['id', 'nombre_telechargements', 'date_creation']
-
+#S
     def get_enseignant_nom(self, obj):
         return obj.enseignant.user.get_full_name() if obj.enseignant else None
 
