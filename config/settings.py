@@ -20,7 +20,7 @@ ALLOWED_HOSTS = ['*']
 # ============================================
 # INSTALLED APPS
 # ============================================
-ASGI_APPLICATION = 'config.asgi.application'
+ASGI_APPLICATION = 'config.asgi.application' 
 INSTALLED_APPS = [
     'daphne',  # WebSocket support
     'django.contrib.admin',
@@ -29,6 +29,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
+    
 
     # Third-party
     'rest_framework',
@@ -187,7 +189,14 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
     ],
 }
-
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('127.0.0.1', 6379)],
+        },
+    },
+}
 # ============================================
 # JWT CONFIGURATION
 # ============================================

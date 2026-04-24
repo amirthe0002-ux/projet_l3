@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{% static 'css/dash_etu.css' %}">
 </head>
 <body>
+
     <!-- Sidebar -->
     <aside class="sidebar">
         <div class="logo">
@@ -22,7 +23,7 @@
             <li><a href="{% url 'mes_ressources' %}" class="nav-link">📚 Ressources</a></li>
             <li><a href="{% url 'messagerie_etudiant' %}" class="nav-link">💬 Messagerie</a></li>
             <li><a href="{% url 'profil' %}" class="nav-link">👤 Mon Profil</a></li>
-            <li><a href="#" class="nav-link">⚙️ Paramètres</a></li>
+            
         </ul>
 
         <div class="sidebar-footer">
@@ -49,10 +50,8 @@
                     <span>📅</span>
                     Synchroniser Calendrier
                 </button>
-                <div class="notification-btn">
-                    <span>🔔</span>
-                    <span class="badge">3</span>
-                </div>
+                <!-- Bell renders here -->
+                <div id="notif-bell-container"></div>
             </div>
         </div>
 
@@ -197,8 +196,8 @@
             </div>
         </div>
     </main>
-    
 
     <script src="{% static 'js/dash_etu.js' %}"></script>
+    <script src="{% static 'js/notifications.js' %}"></script>
 </body>
 </html>

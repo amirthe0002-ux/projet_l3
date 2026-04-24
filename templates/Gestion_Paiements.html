@@ -2,26 +2,44 @@
 {% load static %}
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-UA">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion des Paiements - Dirigeant</title>
     <link rel="stylesheet" href="{% static 'css/Gestion_Paiements.css' %}">
-    
-   </head>
+</head>
 <body>
+    <!-- Animated Background -->
+    <div class="bg-animation">
+        <div class="bg-gradient"></div>
+        <div class="floating-shapes">
+            <div class="shape shape-1"></div>
+            <div class="shape shape-2"></div>
+            <div class="shape shape-3"></div>
+        </div>
+    </div>
+
     <div class="layout">
         <aside class="sidebar">
             <div class="logo">
                 <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
                 <div>
-                    <div style="font-weight: 700;">LanguePro</div>
-                    <div style="font-size: 0.75rem; color: #64748b;">Dirigeant</div>
+                    <div class="logo-text">LanguePro</div>
+                    <div class="logo-sub">Dirigeant</div>
                 </div>
             </div>
             <nav>
-                <a href="{% url 'dashboard_secretariat' %}" class="nav-item"><i class="fas fa-chart-line"></i><span>Tableau de Bord</span></a>
-                <a href="{% url 'paiements'%}" class="nav-item active"><i class="fas fa-wallet"></i><span>Paiements</span></a>
-                <a href="{% url 'salaires' %}" class="nav-item"><i class="fas fa-money-bill-wave"></i><span>Salaires</span></a>
+                <a href="{% url 'dashboard_secretariat' %}" class="nav-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Tableau de Bord</span>
+                </a>
+                <a href="{% url 'paiements'%}" class="nav-item active">
+                    <i class="fas fa-wallet"></i>
+                    <span>Paiements</span>
+                </a>
+                <a href="{% url 'salaires' %}" class="nav-item">
+                    <i class="fas fa-money-bill-wave"></i>
+                    <span>Salaires</span>
+                </a>
             </nav>
         </aside>
 
@@ -34,6 +52,7 @@
                 </button>
             </div>
 
+            <!-- Summary Cards -->
             <div class="summary-cards">
                 <div class="summary-card positive">
                     <h3>Total Payé ce mois</h3>
@@ -49,18 +68,19 @@
                 </div>
             </div>
 
+            <!-- Stats Bar -->
             <div class="stats-bar">
                 <div class="stat-box">
                     <h4>Paiements Complets</h4>
-                    <p style="color: #10b981;">892</p>
+                    <p class="stat-paid">892</p>
                 </div>
                 <div class="stat-box">
                     <h4>Paiements Partiels</h4>
-                    <p style="color: #f59e0b;">45</p>
+                    <p class="stat-partial">45</p>
                 </div>
                 <div class="stat-box">
                     <h4>Impayés</h4>
-                    <p style="color: #ef4444;">12</p>
+                    <p class="stat-unpaid">12</p>
                 </div>
                 <div class="stat-box">
                     <h4>Taux de recouvrement</h4>
@@ -68,9 +88,10 @@
                 </div>
             </div>
 
+            <!-- Filters -->
             <div class="filters">
                 <div class="search-box">
-                    <i class="fas fa-search" style="color: #94a3b8;"></i>
+                    <i class="fas fa-search"></i>
                     <input type="text" placeholder="Rechercher un étudiant...">
                 </div>
                 <select class="filter-select">
@@ -92,6 +113,7 @@
                 </select>
             </div>
 
+            <!-- Table Card -->
             <div class="card">
                 <table>
                     <thead>
@@ -110,66 +132,82 @@
                     <tbody>
                         <tr>
                             <td>
-                                <div style="font-weight: 600;">Ali Saoudi</div>
-                                <div style="font-size: 0.8rem; color: #64748b;">Anglais B1-G2</div>
+                                <div class="student-name">Ali Saoudi</div>
+                                <div class="student-meta">Anglais B1-G2</div>
                             </td>
                             <td>Mars 2024</td>
-                            <td class="amount">2,500 DH</td>
+                            <td class="amount due">2,500 DH</td>
                             <td class="amount paid">2,500 DH</td>
                             <td>-</td>
                             <td>Virement</td>
                             <td>05/03/2024</td>
-                            <td><span class="payment-status status-paid">Payé</span></td>
                             <td>
-                                <button class="action-btn validate"><i class="fas fa-receipt"></i> Reçu</button>
+                                <span class="payment-status status-paid">Payé</span>
+                            </td>
+                            <td>
+                                <button class="action-btn validate">
+                                    <i class="fas fa-receipt"></i> Reçu
+                                </button>
                             </td>
                         </tr>
                         <tr>
                             <td>
-                                <div style="font-weight: 600;">Fatima Alaoui</div>
-                                <div style="font-size: 0.8rem; color: #64748b;">Français A2-G1</div>
+                                <div class="student-name">Fatima Alaoui</div>
+                                <div class="student-meta">Français A2-G1</div>
                             </td>
                             <td>Mars 2024</td>
-                            <td class="amount">2,200 DH</td>
+                            <td class="amount due">2,200 DH</td>
                             <td class="amount paid">1,100 DH</td>
                             <td class="amount unpaid">1,100 DH</td>
                             <td>Espèces</td>
                             <td>10/03/2024</td>
-                            <td><span class="payment-status status-partial">Partiel</span></td>
                             <td>
-                                <button class="action-btn remind"><i class="fas fa-bell"></i> Relancer</button>
+                                <span class="payment-status status-partial">Partiel</span>
+                            </td>
+                            <td>
+                                <button class="action-btn remind">
+                                    <i class="fas fa-bell"></i> Relancer
+                                </button>
                             </td>
                         </tr>
                         <tr>
                             <td>
-                                <div style="font-weight: 600;">Sara Benomar</div>
-                                <div style="font-size: 0.8rem; color: #64748b;">Espagnol A1-G3</div>
+                                <div class="student-name">Sara Benomar</div>
+                                <div class="student-meta">Espagnol A1-G3</div>
                             </td>
                             <td>Mars 2024</td>
-                            <td class="amount">2,000 DH</td>
+                            <td class="amount due">2,000 DH</td>
                             <td class="amount unpaid">0 DH</td>
                             <td class="amount unpaid">2,000 DH</td>
                             <td>-</td>
                             <td>-</td>
-                            <td><span class="payment-status status-unpaid">Impayé</span></td>
                             <td>
-                                <button class="action-btn remind"><i class="fas fa-bell"></i> Relancer</button>
+                                <span class="payment-status status-unpaid">Impayé</span>
+                            </td>
+                            <td>
+                                <button class="action-btn remind">
+                                    <i class="fas fa-bell"></i> Relancer
+                                </button>
                             </td>
                         </tr>
                         <tr>
                             <td>
-                                <div style="font-weight: 600;">Karim Hassani</div>
-                                <div style="font-size: 0.8rem; color: #64748b;">Anglais B2-G1</div>
+                                <div class="student-name">Karim Hassani</div>
+                                <div class="meta">Anglais B2-G1</div>
                             </td>
                             <td>Mars 2024</td>
-                            <td class="amount">2,800 DH</td>
+                            <td class="amount due">2,800 DH</td>
                             <td class="amount paid">2,800 DH</td>
                             <td>-</td>
                             <td>Chèque</td>
                             <td>01/03/2024</td>
-                            <td><span class="payment-status status-paid">Payé</span></td>
                             <td>
-                                <button class="action-btn validate"><i class="fas fa-receipt"></i> Reçu</button>
+                                <span class="payment-status status-paid">Payé</span>
+                            </td>
+                            <td>
+                                <button class="action-btn validate">
+                                    <i class="fas fa-receipt"></i> Reçu
+                                </button>
                             </td>
                         </tr>
                     </tbody>
@@ -177,6 +215,8 @@
             </div>
         </main>
     </div>
+
+    <script src="{% static 'js/dashboard_salaires_sync.js' %}"></script>
+    <script src="{% static 'js/Gestion_Paiements.js' %}"></script>
 </body>
-<script src="{% static 'js/Gestion_Paiements.js' %}"></script>
 </html>

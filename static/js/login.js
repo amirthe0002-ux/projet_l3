@@ -1,7 +1,8 @@
 // ============================================================
 // CONFIG — change uniquement cette URL si ton port change
 // ============================================================
-const API_URL = 'http://127.0.0.1:8000/api';
+console.log("JS WORKING");
+const API_URL = `${window.location.protocol}//${window.location.host}/api`;
 const MAX_TENTATIVES = 5;
 
 // ============================================================

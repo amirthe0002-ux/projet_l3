@@ -683,29 +683,31 @@ class RessourceSerializer(serializers.ModelSerializer):
 
 class RessourceCreateSerializer(serializers.ModelSerializer):
     fichier = serializers.FileField(write_only=True, required=False)
-
+ 
     class Meta:
         model = Ressource
         fields = [
             'titre', 'description', 'type_ressource', 'fichier',
             'niveau', 'groupe', 'visible_etudiants', 'url_lien',
         ]
-
+ 
     def create(self, validated_data):
         fichier  = validated_data.pop('fichier', None)
         request  = self.context.get('request')
+ 
         try:
             enseignant = request.user.enseignant_profile
         except Exception:
             raise serializers.ValidationError("L'utilisateur n'est pas un enseignant.")
-
+ 
         ressource = Ressource.objects.create(
-            enseignant    = enseignant,
+            enseignant     = enseignant,
             chemin_fichier = fichier,
             taille_fichier = round(fichier.size / (1024 * 1024), 2) if fichier else None,
-            **validated_data
+            **validated_data   # groupe, niveau, visible_etudiants, url_lien all land here
         )
         return ressource
+
 
 
 # ============================================================

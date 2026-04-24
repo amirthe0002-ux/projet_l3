@@ -1,163 +1,225 @@
 /**
  * Gestion des Groupes - Secrétariat
- * JWT Authentication + Django REST API
- * FIXED: Modal visibility with dark theme
+ * FIXED: Nombre réel de membres depuis l'API /etudiants/?groupe=X
  */
 
 const API_URL = '/api';
 
 const state = {
-    groupes: [],
-    enseignants: [],
-    searchTerm: '',
+    groupes:      [],
+    enseignants:  [],
+    etudiantsCounts: {}, // cache { groupeId: count }
+    searchTerm:   '',
 };
 
-// JWT HELPERS
+// ─── JWT ──────────────────────────────────────────────────────────────────────
 function getToken() {
-    return localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || null;
+    return localStorage.getItem('access_token') || sessionStorage.getItem('access_token') ||
+           localStorage.getItem('access') || sessionStorage.getItem('access') || null;
 }
-
 function getUser() {
-    try {
-        return JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user'));
-    } catch { return null; }
+    try { return JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user')); }
+    catch { return null; }
 }
-
 function authHeaders() {
-    const token = getToken();
     const h = { 'Content-Type': 'application/json' };
-    if (token) h['Authorization'] = `Bearer ${token}`;
+    const t = getToken();
+    if (t) h['Authorization'] = `Bearer ${t}`;
     return h;
 }
 
-// API
+// ─── API ──────────────────────────────────────────────────────────────────────
 async function apiFetch(endpoint, options = {}) {
-    console.log('API CALL:', endpoint, options.method || 'GET');
     try {
         const res = await fetch(`${API_URL}${endpoint}`, {
             ...options,
             headers: { ...authHeaders(), ...options.headers },
         });
-        console.log('Response status:', res.status);
-        
-        if (res.status === 401) return { error: 'JWT_INVALID', message: 'Token invalide.' };
-        if (res.status === 403) return { error: 'FORBIDDEN', message: 'Accès refusé.' };
-        if (!res.ok) {
-            const text = await res.text();
-            console.error('Error response:', text);
-            return { error: 'API_ERROR', message: `Erreur ${res.status}: ${text}` };
-        }
+        if (res.status === 401) return { error: 'JWT_INVALID',  message: 'Token invalide. Reconnectez-vous.' };
+        if (res.status === 403) return { error: 'FORBIDDEN',    message: 'Accès refusé.' };
         if (res.status === 204) return { success: true };
-        
         const data = await res.json();
-        console.log('Response data:', data);
+        if (!res.ok) return { error: 'API_ERROR', message: flattenErrors(data) };
         return data;
-    } catch (e) {
-        console.error('Network error:', e);
-        return { error: 'NETWORK_ERROR', message: 'Serveur inaccessible.' };
-    }
+    } catch { return { error: 'NETWORK_ERROR', message: 'Serveur inaccessible.' }; }
 }
 
-// SESSION
-function checkSession() {
-    const token = getToken();
-    const user = getUser();
-    console.log('Checking session:', { token: !!token, user: user?.role });
-    
-    if (!token || !user) { 
-        window.location.href = '/login/'; 
-        return null; 
+function flattenErrors(data) {
+    if (typeof data === 'string') return data;
+    if (data.detail) return data.detail;
+    if (data.error)  return data.error;
+    const msgs = [];
+    for (const [k, v] of Object.entries(data)) {
+        if (Array.isArray(v))           msgs.push(`${k}: ${v.join(', ')}`);
+        else if (typeof v === 'object') msgs.push(`${k}: ${flattenErrors(v)}`);
+        else msgs.push(`${k}: ${v}`);
     }
+    return msgs.join(' | ') || 'Erreur inconnue.';
+}
+
+// ─── Session ──────────────────────────────────────────────────────────────────
+function checkSession() {
+    const token = getToken(), user = getUser();
+    if (!token || !user) { window.location.href = '/login/'; return null; }
     if (!['Secretariat', 'Comptable', 'Dirigeant'].includes(user.role)) {
-        window.location.href = '/login/';
-        return null;
+        window.location.href = '/login/'; return null;
     }
     return user;
 }
 
-// TOAST
+// ─── Toast ────────────────────────────────────────────────────────────────────
 function showToast(message, type = 'info') {
-    const colors = { success: '#059669', error: '#dc2626', warning: '#d97706', info: '#0284c7' };
+    document.querySelector('.toast-grp')?.remove();
+    const colors = { success:'#059669', error:'#dc2626', warning:'#d97706', info:'#0284c7' };
     const t = document.createElement('div');
-    t.style.cssText = `
-        position:fixed; bottom:24px; right:24px; z-index:9999;
-        padding:14px 22px; border-radius:12px;
-        background:${colors[type]}; color:white;
-        font-weight:500; font-size:0.9rem;
-        box-shadow:0 8px 24px rgba(0,0,0,0.2);
-        transition:all 0.3s ease;
-    `;
+    t.className = 'toast-grp';
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;padding:14px 22px;
+        border-radius:12px;background:${colors[type]};color:white;font-weight:500;font-size:.9rem;
+        box-shadow:0 8px 24px rgba(0,0,0,.2);transition:all .3s;max-width:400px;`;
     t.textContent = message;
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 3500);
 }
 
-// HELPERS
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function langueFlag(langue) {
     if (!langue) return '🌐';
     const l = langue.toLowerCase();
-    if (l.includes('angl')) return '🇬🇧';
+    if (l.includes('angl'))  return '🇬🇧';
     if (l.includes('franc')) return '🇫🇷';
     if (l.includes('allem')) return '🇩🇪';
     if (l.includes('espag')) return '🇪🇸';
-    if (l.includes('ital')) return '🇮🇹';
+    if (l.includes('ital'))  return '🇮🇹';
     return '🌐';
 }
+function formatPrice(v) {
+    if (!v) return '0';
+    const n = parseFloat(v);
+    return n >= 1000 ? (n/1000).toFixed(1).replace('.0','') + 'k' : n.toString();
+}
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; }
 
-function formatPrice(price) {
-    if (!price) return '0';
-    const num = parseFloat(price);
-    if (num >= 1000) return (num / 1000) + 'k';
-    return num.toString();
+const INP = `width:100%;padding:.75rem;border:2px solid #475569;border-radius:8px;
+             background:#1e293b;color:#fff;font-size:.9rem;box-sizing:border-box;`;
+const LBL = `display:block;margin-bottom:.4rem;font-weight:600;color:#fff;font-size:.875rem;`;
+
+// ─── FIXED: Obtenir le vrai nombre d'étudiants ────────────────────────────────
+// Retourne le nombre réel depuis l'API ou depuis le cache
+function getRealCount(groupe) {
+    // ✅ Priorité 1 : cache fraîchement chargé depuis /etudiants/?groupe=X
+    if (state.etudiantsCounts[groupe.id] !== undefined) {
+        return state.etudiantsCounts[groupe.id];
+    }
+    // ✅ Priorité 2 : champ nombre_etudiants retourné par le serializer
+    if (groupe.nombre_etudiants !== null && groupe.nombre_etudiants !== undefined) {
+        return groupe.nombre_etudiants;
+    }
+    return 0;
 }
 
-// LOAD ENSEIGNANTS
+// ─── FIXED: Charger les vrais compteurs depuis l'API ──────────────────────────
+async function loadAllCounts(groupes) {
+    // Charger tous les étudiants en 1 seul appel et répartir par groupe
+    const data = await apiFetch('/etudiants/');
+    if (data?.error) return;
+
+    const etudiants = Array.isArray(data) ? data : (data.results || []);
+
+    // Initialiser à 0 tous les groupes
+    groupes.forEach(g => { state.etudiantsCounts[g.id] = 0; });
+
+    // Compter par groupe
+    etudiants.forEach(e => {
+        const groupeId = e.groupe;
+        if (groupeId !== null && groupeId !== undefined) {
+            if (state.etudiantsCounts[groupeId] !== undefined) {
+                state.etudiantsCounts[groupeId]++;
+            } else {
+                state.etudiantsCounts[groupeId] = 1;
+            }
+        }
+    });
+
+    // Mettre à jour l'affichage des cartes déjà rendues
+    groupes.forEach(g => {
+        const count = state.etudiantsCounts[g.id];
+        const cap   = g.capacite_max || 15;
+        const pct   = Math.round((count / cap) * 100);
+
+        // Mettre à jour le compteur visible sur la carte
+        const card = document.querySelector(`.group-card[data-id="${g.id}"]`);
+        if (!card) return;
+
+        // Valeur étudiants
+        const statVals = card.querySelectorAll('.g-stat-value');
+        if (statVals[0]) statVals[0].textContent = count;
+
+        // Barre de progression
+        const bar = card.querySelector('[data-pct]');
+        if (bar) {
+            bar.style.width = `${pct}%`;
+            bar.style.background = pct > 85 ? '#ef4444' : pct > 60 ? '#f59e0b' : '#10b981';
+        }
+
+        // Pourcentage texte
+        const pctEl = card.querySelector('[data-pcttext]');
+        if (pctEl) pctEl.textContent = `${pct}%`;
+    });
+}
+
+// ─── Load enseignants ─────────────────────────────────────────────────────────
 async function loadEnseignants() {
-    console.log('Loading enseignants...');
     const data = await apiFetch('/enseignants/');
-    
-    if (data?.error) {
-        console.error('Failed to load enseignants:', data);
-        state.enseignants = [];
-        showToast('Erreur chargement professeurs: ' + data.message, 'error');
-    } else {
+    if (!data?.error) {
         state.enseignants = Array.isArray(data) ? data : (data.results || []);
-        console.log('Loaded enseignants:', state.enseignants.length);
     }
 }
 
-// LOAD GROUPES
-async function loadGroupes() {
-    console.log('Loading groupes...');
-    
-    const timeline = document.querySelector('.groups-timeline');
-    console.log('Timeline element found:', !!timeline);
-    
-    if (!timeline) {
-        console.error('ERROR: .groups-timeline not found in HTML!');
-        showToast('Erreur: conteneur non trouvé', 'error');
-        return;
+// ─── Build teacher options ────────────────────────────────────────────────────
+function buildTeacherOptions(selectedLang = '', selectedId = null) {
+    const lang = (selectedLang || '').toLowerCase().trim();
+    let filtered = state.enseignants.filter(e =>
+        (e.langue_enseignee || '').toLowerCase().trim() === lang
+    );
+    if (!filtered.length && lang) {
+        filtered = state.enseignants.filter(e => {
+            const el = (e.langue_enseignee || '').toLowerCase().trim();
+            return el.includes(lang) || lang.includes(el);
+        });
     }
+    const showingAll = !filtered.length;
+    if (showingAll) filtered = state.enseignants;
 
-    // Show loading
+    const prefix = showingAll && lang
+        ? `<option value="" disabled style="color:#f59e0b;">⚠ Aucun prof de "${selectedLang}" — tous affichés</option>`
+        : `<option value="">-- Sélectionner un professeur --</option>`;
+
+    return prefix + filtered.map(e => {
+        const nom = e.nom_complet || `${e.user?.first_name||''} ${e.user?.last_name||''}`.trim() || `Prof #${e.id}`;
+        const langLabel = showingAll && e.langue_enseignee ? ` (${e.langue_enseignee})` : '';
+        return `<option value="${e.id}" ${e.id === selectedId ? 'selected' : ''}>${nom}${langLabel}</option>`;
+    }).join('');
+}
+
+// ─── Load groupes ─────────────────────────────────────────────────────────────
+async function loadGroupes() {
+    const timeline = document.querySelector('.groups-timeline');
+    if (!timeline) return;
+
     timeline.innerHTML = `
-        <div style="text-align:center; padding:3rem; color:#94a3b8;">
-            <i class="fas fa-spinner fa-spin" style="font-size:2rem; margin-bottom:1rem; display:block;"></i>
+        <div style="text-align:center;padding:3rem;color:#94a3b8;">
+            <i class="fas fa-spinner fa-spin" style="font-size:2rem;margin-bottom:1rem;display:block;"></i>
             <p>Chargement des groupes...</p>
         </div>`;
 
     const data = await apiFetch('/groupes/');
-    console.log('Groupes API response:', data);
-
     if (data?.error) {
         showToast('Erreur: ' + data.message, 'error');
         timeline.innerHTML = `
-            <div style="text-align:center; padding:3rem; color:#dc2626;">
-                <i class="fas fa-exclamation-triangle" style="font-size:2rem; margin-bottom:1rem; display:block;"></i>
+            <div style="text-align:center;padding:3rem;color:#dc2626;">
                 <p>${data.message}</p>
-                <button onclick="loadGroupes()" style="
-                    margin-top:1rem; padding:8px 16px; background:#6366f1;
-                    color:white; border:none; border-radius:8px; cursor:pointer;">
+                <button onclick="loadGroupes()" style="margin-top:1rem;padding:8px 16px;
+                    background:#6366f1;color:white;border:none;border-radius:8px;cursor:pointer;">
                     Réessayer
                 </button>
             </div>`;
@@ -165,124 +227,115 @@ async function loadGroupes() {
     }
 
     state.groupes = Array.isArray(data) ? data : (data.results || []);
-    console.log('Stored groupes:', state.groupes.length, state.groupes);
 
-    if (state.groupes.length === 0) {
-        console.log('No groups found in database');
+    if (!state.groupes.length) {
         timeline.innerHTML = `
-            <div style="text-align:center; padding:3rem; color:#94a3b8;">
-                <i class="fas fa-layer-group" style="font-size:3rem; margin-bottom:1rem; display:block;"></i>
-                <p style="font-size:1.1rem; font-weight:600;">Aucun groupe trouvé</p>
-                <p style="font-size:0.875rem; margin-top:0.5rem;">Créez votre premier groupe avec le bouton ci-dessus</p>
+            <div style="text-align:center;padding:3rem;color:#94a3b8;">
+                <i class="fas fa-layer-group" style="font-size:3rem;margin-bottom:1rem;display:block;"></i>
+                <p style="font-size:1.1rem;font-weight:600;">Aucun groupe trouvé</p>
+                <p style="font-size:.875rem;margin-top:.5rem;">Créez votre premier groupe ci-dessus</p>
             </div>`;
         return;
     }
 
+    // ✅ Rendre la grille d'abord avec les données du serializer
     renderGroupes();
+
+    // ✅ Puis charger les vrais compteurs en arrière-plan et mettre à jour
+    loadAllCounts(state.groupes);
+
     showToast(`${state.groupes.length} groupe(s) chargé(s)`, 'success');
 }
 
-// RENDER GROUPES
+// ─── Render groupes ───────────────────────────────────────────────────────────
 function renderGroupes() {
-    console.log('Rendering groupes...');
-    
     const timeline = document.querySelector('.groups-timeline');
-    if (!timeline) {
-        console.error('Timeline not found during render!');
-        return;
-    }
-
+    if (!timeline) return;
     timeline.innerHTML = '';
 
     const slots = {};
     state.groupes.forEach(g => {
-        const timeKey = extractTimeSlot(g);
-        if (!slots[timeKey]) slots[timeKey] = [];
-        slots[timeKey].push(g);
+        const key = extractTimeSlot(g);
+        if (!slots[key]) slots[key] = [];
+        slots[key].push(g);
     });
-    console.log('Time slots:', Object.keys(slots));
 
-    Object.keys(slots).forEach((timeKey, index) => {
+    Object.keys(slots).forEach(timeKey => {
         const slotGroupes = slots[timeKey];
-        const firstGroupe = slotGroupes[0];
-
-        const isEvening = timeKey.includes('18:00');
-        const icon = isEvening ? 'fa-moon' : 'fa-sun';
-        const gradient = isEvening ? 'background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);' : '';
-
-        const slotDiv = document.createElement('div');
+        const isEvening   = timeKey.includes('18') || timeKey.includes('19') || timeKey.includes('20');
+        const slotDiv     = document.createElement('div');
         slotDiv.className = 'time-slot';
-        
-        const headerHtml = `
+        slotDiv.innerHTML = `
             <div class="time-header">
-                <span class="time-badge" style="${gradient}">
-                    <i class="fas ${icon}"></i> ${timeKey}
+                <span class="time-badge" ${isEvening?'style="background:linear-gradient(135deg,#f59e0b,#d97706);"':''}>
+                    <i class="fas ${isEvening?'fa-moon':'fa-sun'}"></i> ${timeKey}
                 </span>
-                <span class="time-info">Créneau • ${firstGroupe.salle || 'Salle non définie'}</span>
-            </div>
-        `;
-        
+                <span class="time-info">Créneau • ${slotGroupes[0].salle || 'Salle non définie'}</span>
+            </div>`;
         const rowDiv = document.createElement('div');
         rowDiv.className = 'groups-row';
-        
-        slotGroupes.forEach(g => {
-            const card = createGroupCardElement(g);
-            rowDiv.appendChild(card);
-        });
-
-        slotDiv.innerHTML = headerHtml;
+        slotGroupes.forEach(g => rowDiv.appendChild(createGroupCard(g)));
         slotDiv.appendChild(rowDiv);
         timeline.appendChild(slotDiv);
     });
-
-    console.log('Render complete');
 }
 
 function extractTimeSlot(groupe) {
     if (groupe.planning && Array.isArray(groupe.planning) && groupe.planning.length > 0) {
         const p = groupe.planning[0];
-        return `${p.heure_debut || '09:00'} - ${p.heure_fin || '11:00'}`;
+        return `${(p.heure_debut||'09:00').substring(0,5)} - ${(p.heure_fin||'11:00').substring(0,5)}`;
     }
     const name = (groupe.nom_groupe || '').toLowerCase();
-    if (name.includes('soir') || name.includes('18')) return '18:00 - 20:00';
-    if (name.includes('midi') || name.includes('11')) return '11:00 - 13:00';
+    if (name.includes('soir')  || name.includes('18')) return '18:00 - 20:00';
+    if (name.includes('midi')  || name.includes('11')) return '11:00 - 13:00';
     if (name.includes('apres') || name.includes('14')) return '14:00 - 16:00';
     return '09:00 - 11:00';
 }
 
-function createGroupCardElement(groupe) {
+// ─── FIXED: createGroupCard utilise getRealCount ───────────────────────────────
+function createGroupCard(groupe) {
     const card = document.createElement('div');
-    card.className = 'group-card';
-    card.dataset.id = groupe.id;
+    card.className   = 'group-card';
+    card.dataset.id   = groupe.id;
     card.dataset.lang = (groupe.langue || '').toLowerCase();
 
-    const enseignantNom = groupe.enseignant_nom || 'Non assigné';
-    const langue = groupe.langue || 'Non défini';
-    const price = formatPrice(groupe.tarif_mensuel);
-    const students = groupe.nombre_etudiants || 0;
-    const capacity = groupe.capacite_max || 15;
+    // ✅ FIXED: utilise getRealCount() qui cherche dans le cache ET le serializer
+    const nb  = getRealCount(groupe);
+    const cap = groupe.capacite_max || 15;
+    const pct = Math.round((nb / cap) * 100);
 
     card.innerHTML = `
         <div class="group-header">
             <span class="group-level">${groupe.niveau || 'N/A'}</span>
-            <span class="group-lang">${langueFlag(langue)} ${langue}</span>
+            <span class="group-lang">${langueFlag(groupe.langue)} ${groupe.langue || '—'}</span>
         </div>
-        <h3 class="group-name">${groupe.nom_groupe}</h3>
+        <h3 class="group-name">${groupe.nom_groupe || '—'}</h3>
         <p class="group-teacher">
-            <i class="fas fa-chalkboard-teacher"></i> Prof. ${enseignantNom}
+            <i class="fas fa-chalkboard-teacher"></i> Prof. ${groupe.enseignant_nom || 'Non assigné'}
         </p>
         <div class="group-stats">
             <div class="g-stat">
-                <div class="g-stat-value">${students}</div>
+                <div class="g-stat-value">${nb}</div>
                 <div class="g-stat-label">Étudiants</div>
             </div>
             <div class="g-stat">
-                <div class="g-stat-value">${capacity}</div>
+                <div class="g-stat-value">${cap}</div>
                 <div class="g-stat-label">Capacité</div>
             </div>
             <div class="g-stat">
-                <div class="g-stat-value">${price}</div>
-                <div class="g-stat-label">Prix</div>
+                <div class="g-stat-value">${formatPrice(groupe.tarif_mensuel)}</div>
+                <div class="g-stat-label">Prix DA</div>
+            </div>
+        </div>
+        <div style="margin:10px 0 4px;">
+            <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#94a3b8;margin-bottom:4px;">
+                <span>Remplissage</span>
+                <span data-pcttext>${pct}%</span>
+            </div>
+            <div style="height:6px;background:#334155;border-radius:3px;">
+                <div data-pct style="height:100%;width:${pct}%;
+                    background:${pct>85?'#ef4444':pct>60?'#f59e0b':'#10b981'};
+                    border-radius:3px;transition:width .5s;"></div>
             </div>
         </div>
         <div class="group-footer">
@@ -292,308 +345,432 @@ function createGroupCardElement(groupe) {
             <button class="btn-group btn-edit" onclick="openModalModifier(${groupe.id})">
                 <i class="fas fa-edit"></i> Modifier
             </button>
-        </div>
-    `;
-
+        </div>`;
     return card;
 }
 
-// ============================================================
-// MODAL NOUVEAU GROUPE - FIXED DARK THEME
-// ============================================================
-async function openModalNouveau() {
-    console.log('Opening new group modal, enseignants:', state.enseignants.length);
-    
-    if (state.enseignants.length === 0) {
-        showToast('Chargement des professeurs...', 'info');
-        await loadEnseignants();
-    }
-
-    let options = '<option value="">-- Sélectionner --</option>';
-    state.enseignants.forEach(e => {
-        const nom = e.nom_complet || `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.trim() || `Prof #${e.id}`;
-        options += `<option value="${e.id}">${nom}</option>`;
-    });
-
-    const modal = document.createElement('div');
-    modal.id = 'modal-groupe';
-    modal.style.cssText = `
-        position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:2000;
-        display:flex; align-items:center; justify-content:center;`;
-
-    // DARK THEME MODAL - FIXED VISIBILITY
-    modal.innerHTML = `
-        <div style="background:#0f172a !important;border:2px solid #6366f1 !important;border-radius:16px;padding:2rem;width:90%;max-width:500px;max-height:90vh;overflow-y:auto;color:#ffffff !important;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
-            <h3 style="margin-bottom:1rem;color:#ffffff !important;font-size:1.2rem;">
-                <i class="fas fa-plus-circle" style="color:#6366f1;margin-right:8px;"></i>Nouveau Groupe
-            </h3>
-            
-            <div style="display:grid;gap:1rem;">
-                <div>
-                    <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Nom *</label>
-                    <input type="text" id="new_nom" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                </div>
-                
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Niveau *</label>
-                        <select id="new_niveau" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                            <option value="A1">A1</option>
-                            <option value="A2">A2</option>
-                            <option value="B1">B1</option>
-                            <option value="B2">B2</option>
-                            <option value="C1">C1</option>
-                            <option value="C2">C2</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Langue *</label>
-                        <select id="new_langue" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                            <option value="Anglais">🇬🇧 Anglais</option>
-                            <option value="Français">🇫🇷 Français</option>
-                            <option value="Allemand">🇩🇪 Allemand</option>
-                            <option value="Espagnol">🇪🇸 Espagnol</option>
-                            <option value="Italien">🇮🇹 Italien</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div>
-                    <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Professeur *</label>
-                    <select id="new_enseignant" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                        ${options}
-                    </select>
-                </div>
-
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Salle</label>
-                        <input type="text" id="new_salle" placeholder="Salle 101" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                    </div>
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Capacité *</label>
-                        <input type="number" id="new_capacite" value="15" min="1" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                    </div>
-                </div>
-
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Tarif (DA) *</label>
-                        <input type="number" id="new_tarif" placeholder="8000" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                    </div>
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Date début *</label>
-                        <input type="date" id="new_date_debut" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                    </div>
-                </div>
-
-                <div style="display:flex;gap:1rem;margin-top:1rem;">
-                    <button onclick="document.getElementById('modal-groupe').remove()" style="flex:1;padding:0.875rem;border:2px solid #475569 !important;background:#334155 !important;color:#ffffff !important;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;">
-                        Annuler
-                    </button>
-                    <button id="btnCreate" style="flex:1;padding:0.875rem;background:#6366f1 !important;color:#ffffff !important;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;">
-                        <i class="fas fa-save"></i> Créer
-                    </button>
-                </div>
-            </div>
-        </div>`;
-
-    document.body.appendChild(modal);
-
-    // Handle create
-    document.getElementById('btnCreate').onclick = async () => {
-        const btn = document.getElementById('btnCreate');
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
-        btn.disabled = true;
-
-        const payload = {
-            nom_groupe: document.getElementById('new_nom').value,
-            niveau: document.getElementById('new_niveau').value,
-            langue: document.getElementById('new_langue').value,
-            enseignant: parseInt(document.getElementById('new_enseignant').value),
-            salle: document.getElementById('new_salle').value,
-            capacite_max: parseInt(document.getElementById('new_capacite').value),
-            tarif_mensuel: parseFloat(document.getElementById('new_tarif').value),
-            date_debut: document.getElementById('new_date_debut').value,
-            statut_groupe: 'Actif'
-        };
-
-        console.log('Creating group with payload:', payload);
-
-        // Validation
-        if (!payload.nom_groupe || !payload.enseignant || !payload.tarif_mensuel || !payload.date_debut) {
-            showToast('Remplissez tous les champs obligatoires (*)', 'warning');
-            btn.innerHTML = '<i class="fas fa-save"></i> Créer';
-            btn.disabled = false;
-            return;
-        }
-
-        const result = await apiFetch('/groupes/', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-        });
-
-        if (result?.error) {
-            showToast('Erreur: ' + result.message, 'error');
-            btn.innerHTML = '<i class="fas fa-save"></i> Créer';
-            btn.disabled = false;
-            return;
-        }
-
-        console.log('Created group:', result);
-        
-        document.getElementById('modal-groupe').remove();
-        
-        state.groupes.push(result);
-        renderGroupes();
-        
-        showToast('Groupe créé avec succès !', 'success');
-    };
-}
-
-// ============================================================
-// MODAL DETAILS - FIXED DARK THEME
-// ============================================================
+// ─── MODAL DETAILS ────────────────────────────────────────────────────────────
 async function openModalDetails(groupeId) {
     const g = state.groupes.find(x => x.id === groupeId);
     if (!g) return;
 
+    // ✅ FIXED: utilise le vrai count du cache
+    const nb  = getRealCount(g);
+    const cap = g.capacite_max || 15;
+
     const modal = document.createElement('div');
     modal.id = 'modal-details';
-    modal.style.cssText = `
-        position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:2000;
-        display:flex; align-items:center; justify-content:center;`;
+    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;
+        display:flex;align-items:center;justify-content:center;`;
 
-    // DARK THEME MODAL
     modal.innerHTML = `
-        <div style="background:#0f172a !important;border:2px solid #6366f1 !important;border-radius:16px;padding:2rem;width:90%;max-width:450px;color:#ffffff !important;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
-                <h3 style="margin:0;font-size:1.3rem;color:#ffffff !important;">${g.nom_groupe}</h3>
-                <button onclick="document.getElementById('modal-details').remove()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#ffffff !important;">&times;</button>
+        <div style="background:#0f172a;border:2px solid #6366f1;border-radius:16px;
+                    width:90%;max-width:680px;max-height:90vh;overflow:hidden;
+                    display:flex;flex-direction:column;box-shadow:0 25px 50px rgba(0,0,0,.6);"
+             onclick="event.stopPropagation()">
+
+            <!-- Header -->
+            <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:1.25rem 1.5rem;
+                        display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+                <div>
+                    <h3 style="margin:0;color:#fff;font-size:1.15rem;">${g.nom_groupe}</h3>
+                    <p style="margin:4px 0 0;color:rgba(255,255,255,.75);font-size:.85rem;">
+                        ${langueFlag(g.langue)} ${g.langue||'—'} · Niveau ${g.niveau||'—'}
+                    </p>
+                </div>
+                <button onclick="document.getElementById('modal-details').remove()"
+                        style="background:rgba(255,255,255,.2);border:none;color:#fff;
+                               width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.1rem;">×</button>
             </div>
-            
-            <div style="display:grid;gap:0.75rem;margin-bottom:1.5rem;">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:#1e293b !important;border:1px solid #475569 !important;border-radius:8px;">
-                    <span style="color:#94a3b8 !important;font-size:0.875rem;">Niveau</span>
-                    <strong style="color:#ffffff !important;">${g.niveau || 'N/A'}</strong>
+
+            <!-- Tabs -->
+            <div style="display:flex;background:#1e293b;border-bottom:1px solid #334155;flex-shrink:0;">
+                <button id="tabInfoBtn" onclick="switchTab('info')"
+                        style="flex:1;padding:12px;border:none;background:transparent;
+                               color:#6366f1;font-weight:700;font-size:.875rem;cursor:pointer;
+                               border-bottom:3px solid #6366f1;">
+                    📋 Informations
+                </button>
+                <button id="tabStudentsBtn" onclick="switchTab('students')"
+                        style="flex:1;padding:12px;border:none;background:transparent;
+                               color:#94a3b8;font-weight:600;font-size:.875rem;cursor:pointer;
+                               border-bottom:3px solid transparent;">
+                    👥 Étudiants
+                    <span id="studentCountBadge" style="background:#334155;color:#94a3b8;
+                        padding:1px 7px;border-radius:10px;font-size:.75rem;margin-left:4px;">
+                        ${nb}
+                    </span>
+                </button>
+            </div>
+
+            <!-- Tab: Info -->
+            <div id="tabInfo" style="padding:1.25rem 1.5rem;overflow-y:auto;flex:1;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.25rem;">
+                    ${[
+                        ['👨‍🏫 Professeur', g.enseignant_nom || 'Non assigné'],
+                        ['🏫 Salle',        g.salle || 'Non définie'],
+                        ['👥 Étudiants',    `${nb} / ${cap}`],
+                        ['💰 Prix',         `${formatPrice(g.tarif_mensuel)} DA/mois`],
+                        ['📅 Début',        fmtDate(g.date_debut)],
+                        ['📅 Fin',          g.date_fin ? fmtDate(g.date_fin) : 'Non définie'],
+                        ['📊 Statut',       g.statut_groupe || 'Actif'],
+                        ['🔢 Places libres', cap - nb],
+                    ].map(([lb, v]) => `
+                        <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:.75rem 1rem;">
+                            <div style="color:#94a3b8;font-size:.75rem;margin-bottom:3px;">${lb}</div>
+                            <div style="color:#fff;font-weight:600;font-size:.9rem;">${v}</div>
+                        </div>`).join('')}
                 </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:#1e293b !important;border:1px solid #475569 !important;border-radius:8px;">
-                    <span style="color:#94a3b8 !important;font-size:0.875rem;">Langue</span>
-                    <strong style="color:#ffffff !important;">${langueFlag(g.langue)} ${g.langue || 'Non défini'}</strong>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:#1e293b !important;border:1px solid #475569 !important;border-radius:8px;">
-                    <span style="color:#94a3b8 !important;font-size:0.875rem;">Professeur</span>
-                    <strong style="color:#ffffff !important;">${g.enseignant_nom || 'Non assigné'}</strong>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:#1e293b !important;border:1px solid #475569 !important;border-radius:8px;">
-                    <span style="color:#94a3b8 !important;font-size:0.875rem;">Salle</span>
-                    <strong style="color:#ffffff !important;">${g.salle || 'Non définie'}</strong>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:#1e293b !important;border:1px solid #475569 !important;border-radius:8px;">
-                    <span style="color:#94a3b8 !important;font-size:0.875rem;">Étudiants</span>
-                    <strong style="color:#ffffff !important;">${g.nombre_etudiants || 0} / ${g.capacite_max || 15}</strong>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;background:#1e293b !important;border:1px solid #475569 !important;border-radius:8px;">
-                    <span style="color:#94a3b8 !important;font-size:0.875rem;">Prix</span>
-                    <strong style="color:#ffffff !important;">${formatPrice(g.tarif_mensuel)} DA/mois</strong>
+                <div style="display:flex;gap:.75rem;margin-top:auto;padding-top:.5rem;">
+                    <button onclick="document.getElementById('modal-details').remove();openModalModifier(${groupeId})"
+                            style="flex:1;padding:.75rem;background:#3b82f6;color:#fff;border:none;
+                                   border-radius:8px;cursor:pointer;font-weight:600;">
+                        <i class="fas fa-edit"></i> Modifier
+                    </button>
+                    <button onclick="supprimerGroupe(${groupeId})"
+                            style="flex:1;padding:.75rem;background:#ef4444;color:#fff;border:none;
+                                   border-radius:8px;cursor:pointer;font-weight:600;">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </button>
                 </div>
             </div>
-            
-            <div style="display:flex;gap:0.75rem;">
-                <button onclick="document.getElementById('modal-details').remove()" style="flex:1;padding:0.75rem;border:2px solid #475569 !important;background:#334155 !important;color:#ffffff !important;border-radius:8px;cursor:pointer;font-weight:600;">
-                    Fermer
-                </button>
-                <button onclick="document.getElementById('modal-details').remove(); openModalModifier(${groupeId})" style="flex:1;padding:0.75rem;background:#3b82f6 !important;color:#ffffff !important;border:none;border-radius:8px;cursor:pointer;font-weight:600;">
-                    <i class="fas fa-edit"></i> Modifier
-                </button>
-                <button onclick="supprimerGroupe(${groupeId})" style="flex:1;padding:0.75rem;background:#ef4444 !important;color:#ffffff !important;border:none;border-radius:8px;cursor:pointer;font-weight:600;">
-                    <i class="fas fa-trash"></i> Supprimer
-                </button>
+
+            <!-- Tab: Students -->
+            <div id="tabStudents" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+                <div style="padding:.75rem 1.5rem;border-bottom:1px solid #334155;flex-shrink:0;">
+                    <input id="etudiantSearch" type="text" placeholder="🔍 Rechercher un étudiant..."
+                           oninput="filterStudentRows(this.value)"
+                           style="width:100%;padding:.6rem 1rem;background:#1e293b;border:2px solid #334155;
+                                  border-radius:8px;color:#fff;font-size:.875rem;box-sizing:border-box;">
+                </div>
+                <div style="overflow-y:auto;flex:1;padding:.75rem 1.5rem;">
+                    <div id="studentsLoading" style="text-align:center;padding:2rem;color:#94a3b8;">
+                        <i class="fas fa-spinner fa-spin" style="font-size:1.5rem;margin-bottom:.5rem;display:block;"></i>
+                        Chargement des étudiants...
+                    </div>
+                    <table id="studentsTable" style="display:none;width:100%;border-collapse:collapse;font-size:.85rem;">
+                        <thead>
+                            <tr style="border-bottom:2px solid #334155;">
+                                <th style="padding:.6rem .75rem;text-align:left;color:#94a3b8;font-weight:600;">#</th>
+                                <th style="padding:.6rem .75rem;text-align:left;color:#94a3b8;font-weight:600;">Nom</th>
+                                <th style="padding:.6rem .75rem;text-align:left;color:#94a3b8;font-weight:600;">Email</th>
+                                <th style="padding:.6rem .75rem;text-align:center;color:#94a3b8;font-weight:600;">Niveau</th>
+                                <th style="padding:.6rem .75rem;text-align:center;color:#94a3b8;font-weight:600;">Moyenne</th>
+                                <th style="padding:.6rem .75rem;text-align:center;color:#94a3b8;font-weight:600;">Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentsTbody"></tbody>
+                    </table>
+                    <div id="studentsEmpty" style="display:none;text-align:center;padding:2rem;color:#64748b;">
+                        <div style="font-size:2.5rem;margin-bottom:.75rem;">👤</div>
+                        <p>Aucun étudiant dans ce groupe</p>
+                    </div>
+                </div>
             </div>
         </div>`;
 
     document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    // ✅ FIXED: charger les étudiants depuis l'API directement
+    loadStudentsForGroup(groupeId);
 }
 
-// ============================================================
-// MODAL MODIFIER - FIXED DARK THEME
-// ============================================================
+function switchTab(tab) {
+    const isInfo = tab === 'info';
+    document.getElementById('tabInfo').style.display     = isInfo ? 'block' : 'none';
+    document.getElementById('tabStudents').style.display = isInfo ? 'none'  : 'flex';
+
+    const iBtn = document.getElementById('tabInfoBtn');
+    const sBtn = document.getElementById('tabStudentsBtn');
+    if (iBtn) { iBtn.style.color = isInfo ? '#6366f1' : '#94a3b8'; iBtn.style.borderBottom = isInfo ? '3px solid #6366f1' : '3px solid transparent'; }
+    if (sBtn) { sBtn.style.color = !isInfo ? '#6366f1' : '#94a3b8'; sBtn.style.borderBottom = !isInfo ? '3px solid #6366f1' : '3px solid transparent'; }
+}
+
+// ─── FIXED: loadStudentsForGroup ──────────────────────────────────────────────
+async function loadStudentsForGroup(groupeId) {
+    // ✅ Charger directement depuis l'API avec le filtre groupe
+    const data = await apiFetch(`/etudiants/?groupe=${groupeId}`);
+
+    const loading = document.getElementById('studentsLoading');
+    const table   = document.getElementById('studentsTable');
+    const empty   = document.getElementById('studentsEmpty');
+    const badge   = document.getElementById('studentCountBadge');
+
+    if (!loading) return; // modal fermé
+
+    const students = !data?.error ? (Array.isArray(data) ? data : []) : [];
+
+    // ✅ Mettre à jour le cache
+    state.etudiantsCounts[groupeId] = students.length;
+
+    // ✅ Mettre à jour le badge dans le tab
+    if (badge) {
+        badge.textContent  = students.length;
+        badge.style.background = students.length ? '#6366f1' : '#334155';
+        badge.style.color      = students.length ? '#fff'    : '#94a3b8';
+    }
+
+    // ✅ Mettre à jour aussi la carte dans la grille
+    const card = document.querySelector(`.group-card[data-id="${groupeId}"]`);
+    if (card) {
+        const statVals = card.querySelectorAll('.g-stat-value');
+        if (statVals[0]) statVals[0].textContent = students.length;
+        const g   = state.groupes.find(x => x.id === groupeId);
+        const cap = g?.capacite_max || 15;
+        const pct = Math.round((students.length / cap) * 100);
+        const bar = card.querySelector('[data-pct]');
+        if (bar) { bar.style.width = `${pct}%`; bar.style.background = pct>85?'#ef4444':pct>60?'#f59e0b':'#10b981'; }
+        const pctEl = card.querySelector('[data-pcttext]');
+        if (pctEl) pctEl.textContent = `${pct}%`;
+    }
+
+    loading.style.display = 'none';
+
+    if (!students.length) {
+        if (empty) empty.style.display = 'block';
+        return;
+    }
+
+    if (table) table.style.display = 'table';
+    const tbody = document.getElementById('studentsTbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = students.map((s, i) => {
+        const nom      = s.user ? `${s.user.first_name||''} ${s.user.last_name||''}`.trim() : '—';
+        const email    = s.user?.email || '—';
+        const niveau   = s.niveau_actuel || '—';
+        const moy      = s.moyenne_generale != null ? Number(s.moyenne_generale).toFixed(1) : '—';
+        const statut   = s.statut_etudiant || 'Actif';
+        const initials = nom.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0,2).toUpperCase();
+        const moyColor = parseFloat(moy) >= 14 ? '#10b981' : parseFloat(moy) >= 10 ? '#3b82f6' : '#ef4444';
+
+        return `
+            <tr class="student-row" style="border-bottom:1px solid #1e293b;transition:background .15s;"
+                onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background=''">
+                <td style="padding:.6rem .75rem;color:#64748b;">${i+1}</td>
+                <td style="padding:.6rem .75rem;">
+                    <div style="display:flex;align-items:center;gap:.6rem;">
+                        <div style="width:30px;height:30px;border-radius:50%;
+                                    background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+                                    display:flex;align-items:center;justify-content:center;
+                                    font-size:.7rem;font-weight:700;flex-shrink:0;">${initials || '?'}</div>
+                        <span style="color:#e2e8f0;font-weight:500;">${nom}</span>
+                    </div>
+                </td>
+                <td style="padding:.6rem .75rem;color:#94a3b8;font-size:.8rem;">${email}</td>
+                <td style="padding:.6rem .75rem;text-align:center;">
+                    <span style="background:#312e81;color:#a5b4fc;padding:2px 8px;border-radius:8px;font-size:.75rem;font-weight:700;">${niveau}</span>
+                </td>
+                <td style="padding:.6rem .75rem;text-align:center;color:${moyColor};font-weight:700;">${moy}/20</td>
+                <td style="padding:.6rem .75rem;text-align:center;">
+                    <span style="padding:2px 8px;border-radius:8px;font-size:.75rem;font-weight:600;
+                        background:${statut==='Actif'?'rgba(16,185,129,.15)':'rgba(239,68,68,.15)'};
+                        color:${statut==='Actif'?'#10b981':'#ef4444'};">${statut}</span>
+                </td>
+            </tr>`;
+    }).join('');
+}
+
+function filterStudentRows(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll('#studentsTbody .student-row').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+}
+
+// ─── MODAL NOUVEAU GROUPE ─────────────────────────────────────────────────────
+async function openModalNouveau() {
+    if (!state.enseignants.length) {
+        showToast('Chargement des professeurs...', 'info');
+        await loadEnseignants();
+    }
+    const today = new Date().toISOString().split('T')[0];
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-groupe';
+    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;
+        display:flex;align-items:center;justify-content:center;`;
+
+    modal.innerHTML = `
+        <div style="background:#0f172a;border:2px solid #6366f1;border-radius:16px;padding:2rem;
+                    width:90%;max-width:520px;max-height:90vh;overflow-y:auto;color:#fff;
+                    box-shadow:0 25px 50px rgba(0,0,0,.6);" onclick="event.stopPropagation()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+                <h3 style="margin:0;font-size:1.15rem;">
+                    <i class="fas fa-plus-circle" style="color:#6366f1;margin-right:8px;"></i>Nouveau Groupe
+                </h3>
+                <button onclick="document.getElementById('modal-groupe').remove()"
+                        style="background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;">×</button>
+            </div>
+            <div style="display:grid;gap:.9rem;">
+                <div><label style="${LBL}">Nom du groupe *</label>
+                    <input type="text" id="new_nom" placeholder="ex: Anglais A2 - Matin" style="${INP}"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div><label style="${LBL}">Niveau *</label>
+                        <select id="new_niveau" style="${INP}">
+                            ${['A1','A2','B1','B2','C1','C2'].map(n=>`<option value="${n}">${n}</option>`).join('')}
+                        </select></div>
+                    <div><label style="${LBL}">Langue *</label>
+                        <select id="new_langue" onchange="updateTeacherOptions(this.value)" style="${INP}">
+                            ${['Anglais','Français','Allemand','Espagnol','Italien']
+                              .map(l=>`<option value="${l}">${langueFlag(l)} ${l}</option>`).join('')}
+                        </select></div>
+                </div>
+                <div><label style="${LBL}">Professeur * <span style="font-weight:400;color:#64748b;font-size:.75rem;">(filtré par langue)</span></label>
+                    <select id="new_enseignant" style="${INP}">${buildTeacherOptions('Anglais')}</select></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div><label style="${LBL}">Salle</label>
+                        <input type="text" id="new_salle" placeholder="Salle 101" style="${INP}"></div>
+                    <div><label style="${LBL}">Capacité max *</label>
+                        <input type="number" id="new_capacite" value="15" min="1" style="${INP}"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div><label style="${LBL}">Tarif mensuel (DA) *</label>
+                        <input type="number" id="new_tarif" placeholder="8000" style="${INP}"></div>
+                    <div><label style="${LBL}">Date début *</label>
+                        <input type="date" id="new_date_debut" value="${today}" style="${INP}"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div><label style="${LBL}">Durée (semaines)</label>
+                        <input type="number" id="new_duree" value="12" min="1" style="${INP}"></div>
+                    <div><label style="${LBL}">Date fin (optionnel)</label>
+                        <input type="date" id="new_date_fin" style="${INP}"></div>
+                </div>
+                <div id="newGrpError" style="display:none;padding:.75rem;background:rgba(239,68,68,.1);
+                     border:1px solid #ef4444;border-radius:8px;color:#fca5a5;font-size:.875rem;"></div>
+                <div style="display:flex;gap:.75rem;margin-top:.5rem;">
+                    <button onclick="document.getElementById('modal-groupe').remove()"
+                            style="flex:1;padding:.875rem;border:2px solid #475569;background:#334155;
+                                   color:#fff;border-radius:8px;cursor:pointer;font-weight:600;">Annuler</button>
+                    <button id="btnCreate"
+                            style="flex:1;padding:.875rem;background:#6366f1;color:#fff;border:none;
+                                   border-radius:8px;cursor:pointer;font-weight:700;font-size:.95rem;">
+                        <i class="fas fa-save"></i> Créer le groupe
+                    </button>
+                </div>
+            </div>
+        </div>`;
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    document.getElementById('btnCreate').onclick = async () => {
+        const errEl = document.getElementById('newGrpError');
+        errEl.style.display = 'none';
+        const btn = document.getElementById('btnCreate');
+
+        const nom      = document.getElementById('new_nom').value.trim();
+        const niveau   = document.getElementById('new_niveau').value;
+        const langue   = document.getElementById('new_langue').value;
+        const ensId    = parseInt(document.getElementById('new_enseignant').value);
+        const salle    = document.getElementById('new_salle').value.trim();
+        const capacite = parseInt(document.getElementById('new_capacite').value) || 15;
+        const tarif    = parseFloat(document.getElementById('new_tarif').value);
+        const debut    = document.getElementById('new_date_debut').value;
+        const duree    = parseInt(document.getElementById('new_duree').value) || 12;
+        const fin      = document.getElementById('new_date_fin').value || null;
+
+        if (!nom || !ensId || !tarif || !debut) {
+            errEl.textContent = '⚠️ Veuillez remplir tous les champs obligatoires (*).';
+            errEl.style.display = 'block'; return;
+        }
+
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
+        btn.disabled  = true;
+
+        const result = await apiFetch('/groupes/', {
+            method: 'POST',
+            body: JSON.stringify({
+                nom_groupe: nom, niveau, langue, enseignant: ensId,
+                salle: salle || '', capacite_max: capacite, tarif_mensuel: tarif,
+                date_debut: debut, date_fin: fin, duree_semaines: duree,
+                statut_groupe: 'Actif', nombre_etudiants: 0,
+            }),
+        });
+
+        if (result?.error) {
+            errEl.textContent = '❌ ' + result.message;
+            errEl.style.display = 'block';
+            btn.innerHTML = '<i class="fas fa-save"></i> Créer le groupe';
+            btn.disabled = false; return;
+        }
+
+        modal.remove();
+        state.groupes.push(result);
+        state.etudiantsCounts[result.id] = 0; // nouveau groupe = 0 étudiants
+        renderGroupes();
+        showToast(`✅ Groupe "${nom}" créé avec succès !`, 'success');
+    };
+}
+
+function updateTeacherOptions(lang) {
+    const select = document.getElementById('new_enseignant');
+    if (select) select.innerHTML = buildTeacherOptions(lang);
+}
+
+// ─── MODAL MODIFIER ───────────────────────────────────────────────────────────
 async function openModalModifier(groupeId) {
     const g = state.groupes.find(x => x.id === groupeId);
     if (!g) return;
 
-    let options = '<option value="">-- Sélectionner --</option>';
-    state.enseignants.forEach(e => {
-        const nom = e.nom_complet || `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.trim() || `Prof #${e.id}`;
-        const selected = e.id === g.enseignant ? 'selected' : '';
-        options += `<option value="${e.id}" ${selected}>${nom}</option>`;
-    });
-
     const modal = document.createElement('div');
     modal.id = 'modal-modifier';
-    modal.style.cssText = `
-        position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:2000;
-        display:flex; align-items:center; justify-content:center;`;
+    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;
+        display:flex;align-items:center;justify-content:center;`;
 
-    // DARK THEME MODAL
     modal.innerHTML = `
-        <div style="background:#0f172a !important;border:2px solid #6366f1 !important;border-radius:16px;padding:2rem;width:90%;max-width:500px;max-height:90vh;overflow-y:auto;color:#ffffff !important;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
+        <div style="background:#0f172a;border:2px solid #3b82f6;border-radius:16px;padding:2rem;
+                    width:90%;max-width:520px;max-height:90vh;overflow-y:auto;color:#fff;
+                    box-shadow:0 25px 50px rgba(0,0,0,.6);" onclick="event.stopPropagation()">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
-                <h3 style="margin:0;font-size:1.2rem;color:#ffffff !important;">
-                    <i class="fas fa-edit" style="color:#3b82f6;margin-right:8px;"></i>Modifier Groupe
+                <h3 style="margin:0;font-size:1.15rem;">
+                    <i class="fas fa-edit" style="color:#3b82f6;margin-right:8px;"></i>Modifier le groupe
                 </h3>
-                <button onclick="document.getElementById('modal-modifier').remove()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#ffffff !important;">&times;</button>
+                <button onclick="document.getElementById('modal-modifier').remove()"
+                        style="background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;">×</button>
             </div>
-            
-            <div style="display:grid;gap:1rem;">
-                <div>
-                    <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Nom</label>
-                    <input type="text" id="mod_nom" value="${g.nom_groupe}" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                </div>
-                
+            <div style="display:grid;gap:.9rem;">
+                <div><label style="${LBL}">Nom du groupe</label>
+                    <input type="text" id="mod_nom" value="${g.nom_groupe||''}" style="${INP}"></div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Niveau</label>
-                        <select id="mod_niveau" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                            ${['A1','A2','B1','B2','C1','C2'].map(n => `<option value="${n}" ${g.niveau===n?'selected':''}>${n}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Langue</label>
-                        <select id="mod_langue" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                            ${['Anglais','Français','Allemand','Espagnol','Italien'].map(l => `<option value="${l}" ${g.langue===l?'selected':''}>${l}</option>`).join('')}
-                        </select>
-                    </div>
+                    <div><label style="${LBL}">Niveau</label>
+                        <select id="mod_niveau" style="${INP}">
+                            ${['A1','A2','B1','B2','C1','C2'].map(n=>
+                                `<option value="${n}" ${g.niveau===n?'selected':''}>${n}</option>`).join('')}
+                        </select></div>
+                    <div><label style="${LBL}">Langue</label>
+                        <select id="mod_langue" onchange="updateModTeacherOptions(this.value)" style="${INP}">
+                            ${['Anglais','Français','Allemand','Espagnol','Italien'].map(l=>
+                                `<option value="${l}" ${g.langue===l?'selected':''}>${langueFlag(l)} ${l}</option>`).join('')}
+                        </select></div>
                 </div>
-
-                <div>
-                    <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Professeur</label>
-                    <select id="mod_enseignant" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                        ${options}
-                    </select>
-                </div>
-
+                <div><label style="${LBL}">Professeur <span style="font-weight:400;color:#64748b;font-size:.75rem;">(filtré par langue)</span></label>
+                    <select id="mod_enseignant" style="${INP}">${buildTeacherOptions(g.langue, g.enseignant)}</select></div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Salle</label>
-                        <input type="text" id="mod_salle" value="${g.salle || ''}" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                    </div>
-                    <div>
-                        <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Capacité</label>
-                        <input type="number" id="mod_capacite" value="${g.capacite_max}" min="1" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
-                    </div>
+                    <div><label style="${LBL}">Salle</label>
+                        <input type="text" id="mod_salle" value="${g.salle||''}" style="${INP}"></div>
+                    <div><label style="${LBL}">Capacité max</label>
+                        <input type="number" id="mod_capacite" value="${g.capacite_max||15}" min="1" style="${INP}"></div>
                 </div>
-
-                <div>
-                    <label style="display:block;margin-bottom:0.5rem;font-weight:600;color:#ffffff !important;">Tarif (DA)</label>
-                    <input type="number" id="mod_tarif" value="${g.tarif_mensuel}" style="width:100%;padding:0.75rem;border:2px solid #475569 !important;border-radius:8px;background:#1e293b !important;color:#ffffff !important;font-size:0.9rem;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div><label style="${LBL}">Tarif (DA)</label>
+                        <input type="number" id="mod_tarif" value="${g.tarif_mensuel||''}" style="${INP}"></div>
+                    <div><label style="${LBL}">Statut</label>
+                        <select id="mod_statut" style="${INP}">
+                            ${['Actif','Cloture','Annule'].map(s=>
+                                `<option value="${s}" ${g.statut_groupe===s?'selected':''}>${s}</option>`).join('')}
+                        </select></div>
                 </div>
-                
-                <div style="display:flex;gap:0.75rem;margin-top:1rem;">
-                    <button onclick="document.getElementById('modal-modifier').remove()" style="flex:1;padding:0.875rem;border:2px solid #475569 !important;background:#334155 !important;color:#ffffff !important;border-radius:8px;cursor:pointer;font-weight:600;">
-                        Annuler
-                    </button>
-                    <button id="btnSave" style="flex:1;padding:0.875rem;background:#3b82f6 !important;color:#ffffff !important;border:none;border-radius:8px;cursor:pointer;font-weight:600;">
+                <div id="modGrpError" style="display:none;padding:.75rem;background:rgba(239,68,68,.1);
+                     border:1px solid #ef4444;border-radius:8px;color:#fca5a5;font-size:.875rem;"></div>
+                <div style="display:flex;gap:.75rem;margin-top:.5rem;">
+                    <button onclick="document.getElementById('modal-modifier').remove()"
+                            style="flex:1;padding:.875rem;border:2px solid #475569;background:#334155;
+                                   color:#fff;border-radius:8px;cursor:pointer;font-weight:600;">Annuler</button>
+                    <button id="btnSave"
+                            style="flex:1;padding:.875rem;background:#3b82f6;color:#fff;border:none;
+                                   border-radius:8px;cursor:pointer;font-weight:700;">
                         <i class="fas fa-save"></i> Enregistrer
                     </button>
                 </div>
@@ -601,80 +778,71 @@ async function openModalModifier(groupeId) {
         </div>`;
 
     document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
     document.getElementById('btnSave').onclick = async () => {
+        const errEl = document.getElementById('modGrpError');
+        errEl.style.display = 'none';
         const btn = document.getElementById('btnSave');
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
-        btn.disabled = true;
-
-        const payload = {
-            nom_groupe: document.getElementById('mod_nom').value,
-            niveau: document.getElementById('mod_niveau').value,
-            langue: document.getElementById('mod_langue').value,
-            enseignant: parseInt(document.getElementById('mod_enseignant').value),
-            salle: document.getElementById('mod_salle').value,
-            capacite_max: parseInt(document.getElementById('mod_capacite').value),
-            tarif_mensuel: parseFloat(document.getElementById('mod_tarif').value),
-        };
+        btn.disabled  = true;
 
         const result = await apiFetch(`/groupes/${groupeId}/`, {
             method: 'PUT',
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+                nom_groupe:    document.getElementById('mod_nom').value.trim(),
+                niveau:        document.getElementById('mod_niveau').value,
+                langue:        document.getElementById('mod_langue').value,
+                enseignant:    parseInt(document.getElementById('mod_enseignant').value),
+                salle:         document.getElementById('mod_salle').value.trim(),
+                capacite_max:  parseInt(document.getElementById('mod_capacite').value) || 15,
+                tarif_mensuel: parseFloat(document.getElementById('mod_tarif').value),
+                statut_groupe: document.getElementById('mod_statut').value,
+            }),
         });
 
         if (result?.error) {
-            showToast('Erreur: ' + result.message, 'error');
+            errEl.textContent = '❌ ' + result.message;
+            errEl.style.display = 'block';
             btn.innerHTML = '<i class="fas fa-save"></i> Enregistrer';
-            btn.disabled = false;
-            return;
+            btn.disabled = false; return;
         }
 
+        // ✅ Conserver le vrai count dans le résultat
+        result.nombre_etudiants = state.etudiantsCounts[groupeId] ?? g.nombre_etudiants ?? 0;
         const idx = state.groupes.findIndex(x => x.id === groupeId);
         if (idx !== -1) state.groupes[idx] = result;
-
-        document.getElementById('modal-modifier').remove();
+        modal.remove();
         renderGroupes();
-        showToast('Groupe modifié !', 'success');
+        showToast('✅ Groupe modifié avec succès !', 'success');
     };
 }
 
-// SUPPRIMER
-async function supprimerGroupe(groupeId) {
-    if (!confirm('Supprimer ce groupe ?')) return;
-    
-    const result = await apiFetch(`/groupes/${groupeId}/`, { method: 'DELETE' });
-    if (result?.error) {
-        showToast('Erreur: ' + result.message, 'error');
-        return;
-    }
-    
-    state.groupes = state.groupes.filter(g => g.id !== groupeId);
-    
-    // Close any open modals
-    document.getElementById('modal-details')?.remove();
-    document.getElementById('modal-modifier')?.remove();
-    
-    renderGroupes();
-    showToast('Groupe supprimé', 'success');
+function updateModTeacherOptions(lang) {
+    const select = document.getElementById('mod_enseignant');
+    if (!select) return;
+    select.innerHTML = buildTeacherOptions(lang, parseInt(select.value) || null);
 }
 
-// INIT
+// ─── Supprimer ────────────────────────────────────────────────────────────────
+async function supprimerGroupe(groupeId) {
+    const g = state.groupes.find(x => x.id === groupeId);
+    if (!confirm(`Supprimer le groupe "${g?.nom_groupe || groupeId}" ?`)) return;
+    const result = await apiFetch(`/groupes/${groupeId}/`, { method: 'DELETE' });
+    if (result?.error) { showToast('❌ ' + result.message, 'error'); return; }
+    state.groupes = state.groupes.filter(x => x.id !== groupeId);
+    delete state.etudiantsCounts[groupeId];
+    document.getElementById('modal-details')?.remove();
+    document.getElementById('modal-modifier')?.remove();
+    renderGroupes();
+    showToast('Groupe supprimé.', 'success');
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('Page loaded, initializing...');
-    
     const user = checkSession();
     if (!user) return;
-
-    // Setup button
-    const btn = document.querySelector('.btn-primary');
-    if (btn) {
-        btn.addEventListener('click', openModalNouveau);
-        console.log('Button event attached');
-    } else {
-        console.error('Button .btn-primary not found!');
-    }
-
-    // Load data
+    document.querySelector('.btn-primary')?.addEventListener('click', openModalNouveau);
     await loadEnseignants();
     await loadGroupes();
 });

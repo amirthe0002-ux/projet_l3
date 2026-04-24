@@ -1,849 +1,787 @@
 /**
- * Invoice Generator - Centre de Langues
+ * Générateur de Factures - Centre de Langues
+ * JWT Authentication + Django REST API
  * File: static/js/factures.js
- * Integrated with JWT Authentication & Real Database API
  */
 
-// ============================================
-// CONFIGURATION
-// ============================================
-const CONFIG = {
-    apiUrl: '/api',
-    currency: 'DA',
-    defaultTVA: 19,
-    defaultDiscount: 0
+// ============================================================
+// CONFIG
+// ============================================================
+const API_URL = '/api';
+
+// État global
+const state = {
+    currentTemplate: 1,
+    services:        [],          // lignes de services
+    savedInvoices:   [],          // factures sauvegardées (localStorage + API)
+    students:        [],          // étudiants chargés depuis l'API
+    invoiceCounter:  1,
 };
 
-// ============================================
-// JWT HELPERS (Matching your dash_secr.js)
-// ============================================
+// Templates couleurs
+const TEMPLATES = {
+    1: { primary: '#6366f1', secondary: '#8b5cf6', bg: '#f5f3ff', name: 'Violet' },
+    2: { primary: '#0ea5e9', secondary: '#38bdf8', bg: '#f0f9ff', name: 'Bleu'   },
+    3: { primary: '#10b981', secondary: '#34d399', bg: '#f0fdf4', name: 'Vert'   },
+    4: { primary: '#f59e0b', secondary: '#fbbf24', bg: '#fffbeb', name: 'Doré'   },
+};
+
+// ============================================================
+// JWT HELPERS
+// ============================================================
 function getToken() {
-    return localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || null;
+    return localStorage.getItem('access_token') || sessionStorage.getItem('access_token')
+        || localStorage.getItem('access') || sessionStorage.getItem('access') || null;
 }
-
 function getUser() {
-    try {
-        return JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user'));
-    } catch { 
-        return null; 
-    }
+    try { return JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user')); }
+    catch { return null; }
 }
-
 function authHeaders() {
-    const token = getToken();
     const h = { 'Content-Type': 'application/json' };
-    if (token) h['Authorization'] = `Bearer ${token}`;
+    const t = getToken();
+    if (t) h['Authorization'] = `Bearer ${t}`;
     return h;
 }
 
-// ============================================
-// API FETCH HELPER (Matching your dash_secr.js)
-// ============================================
+// ============================================================
+// API
+// ============================================================
 async function apiFetch(endpoint, options = {}) {
     try {
-        const res = await fetch(`${CONFIG.apiUrl}${endpoint}`, {
+        const res = await fetch(`${API_URL}${endpoint}`, {
             ...options,
             headers: { ...authHeaders(), ...options.headers },
         });
-        
-        if (res.status === 401) {
-            showToast('Session expirée. Veuillez vous reconnecter.', 'error');
-            setTimeout(() => window.location.href = '/login/', 2000);
-            return { error: 'JWT_INVALID', message: 'Token invalide.' };
-        }
+        if (res.status === 401) return { error: 'JWT', message: 'Token invalide.' };
         if (res.status === 403) return { error: 'FORBIDDEN', message: 'Accès refusé.' };
-        if (!res.ok) return { error: 'API_ERROR', message: `Erreur ${res.status}` };
         if (res.status === 204) return { success: true };
-        
         return await res.json();
-    } catch (e) {
-        return { error: 'NETWORK_ERROR', message: 'Serveur inaccessible.' };
-    }
+    } catch { return { error: 'NETWORK', message: 'Serveur inaccessible.' }; }
 }
 
-// ============================================
-// STATE MANAGEMENT
-// ============================================
-let state = {
-    currentTemplate: 1,
-    services: [],
-    invoiceHistory: [],
-    currentInvoiceId: null,
-    etudiants: [],
-    groupes: []
-};
-
-// Template gradients
-const TEMPLATES = {
-    1: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    2: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    3: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    4: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
-};
-
-// ============================================
-// INITIALIZATION
-// ============================================
-document.addEventListener('DOMContentLoaded', () => {
-    const user = checkSession();
-    if (!user) return;
-    
-    initializeDates();
-    loadInitialData();
-    setupEventListeners();
-});
-
-function checkSession() {
-    const token = getToken();
-    const user = getUser();
-    
-    if (!token || !user) { 
-        window.location.href = '/login/'; 
-        return null; 
-    }
-    
-    if (!['Secretariat', 'Comptable', 'Dirigeant'].includes(user.role)) {
-        window.location.href = '/login/';
-        return null;
-    }
-    
-    updateHeaderWithUser(user);
-    return user;
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(message, type = 'info') {
+    document.querySelector('.toast-fac')?.remove();
+    const colors = { success:'#059669', error:'#dc2626', warning:'#d97706', info:'#0284c7' };
+    const icons  = { success:'✓', error:'✕', warning:'⚠', info:'ℹ' };
+    const t = document.createElement('div');
+    t.className = 'toast-fac';
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;
+        padding:14px 22px;border-radius:12px;background:${colors[type]};color:white;
+        font-weight:500;font-size:.9rem;box-shadow:0 8px 24px rgba(0,0,0,.2);
+        display:flex;align-items:center;gap:8px;max-width:360px;
+        transform:translateX(120%);opacity:0;transition:all .3s ease;`;
+    t.innerHTML = `<span>${icons[type]}</span><span>${message}</span>`;
+    document.body.appendChild(t);
+    requestAnimationFrame(() => { t.style.transform='translateX(0)'; t.style.opacity='1'; });
+    setTimeout(() => { t.style.transform='translateX(120%)'; t.style.opacity='0';
+        setTimeout(() => t.remove(), 300); }, 3500);
 }
 
-function updateHeaderWithUser(user) {
-    const headerText = document.querySelector('.header-text p');
-    if (headerText && user) {
-        headerText.textContent = `Centre de Langues - ${user.role} | ${user.first_name || ''} ${user.last_name || ''}`;
+// ============================================================
+// FORMATAGE
+// ============================================================
+function fmtDA(v) {
+    const n = parseFloat(v) || 0;
+    return new Intl.NumberFormat('fr-DZ').format(Math.round(n)) + ' DA';
+}
+function fmtDate(dateStr) {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('fr-DZ', { day:'numeric', month:'long', year:'numeric' });
+}
+function today() {
+    return new Date().toISOString().split('T')[0];
+}
+function addDays(dateStr, days) {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+}
+function nextInvoiceNum() {
+    const year = new Date().getFullYear();
+    const num  = String(state.invoiceCounter).padStart(3, '0');
+    return `FAC-${year}-${num}`;
+}
+
+// ============================================================
+// INIT — AJOUTER UN SERVICE PAR DÉFAUT
+// ============================================================
+function initDefaults() {
+    // Dates par défaut
+    const dateEl = document.getElementById('invoiceDate');
+    const dueEl  = document.getElementById('dueDate');
+    if (dateEl && !dateEl.value) dateEl.value = today();
+    if (dueEl  && !dueEl.value)  dueEl.value  = addDays(today(), 30);
+
+    // Numéro de facture
+    const numEl = document.getElementById('invoiceNum');
+    if (numEl) numEl.value = nextInvoiceNum();
+
+    // Un service par défaut
+    if (!state.services.length) {
+        addService('Cours de Langue - Mensualité', 1, 8000);
     }
-}
 
-function initializeDates() {
-    const today = new Date();
-    const due = new Date();
-    due.setDate(due.getDate() + 30);
-    
-    document.getElementById('invoiceDate').valueAsDate = today;
-    document.getElementById('dueDate').valueAsDate = due;
-}
-
-async function loadInitialData() {
-    await Promise.all([
-        loadEtudiants(),
-        loadGroupes(),
-        loadRecentInvoices()
-    ]);
-    
-    addService('', '', 1);
     updatePreview();
+    loadHistory();
 }
 
-function setupEventListeners() {
-    const inputs = document.querySelectorAll('.form-input, .form-select, .form-textarea');
-    inputs.forEach(input => {
-        input.addEventListener('input', debounce(updatePreview, 100));
-        input.addEventListener('change', updatePreview);
-    });
-}
-
-// ============================================
-// DATA LOADING FROM REAL API
-// ============================================
-async function loadEtudiants() {
-    const data = await apiFetch('/etudiants/?statut=Actif');
-    if (data?.error) {
-        showToast('Erreur chargement étudiants: ' + data.message, 'error');
-        return;
-    }
-    state.etudiants = data || [];
-}
-
-async function loadGroupes() {
-    const data = await apiFetch('/groupes/?statut=Actif');
-    if (data?.error) {
-        showToast('Erreur chargement groupes: ' + data.message, 'error');
-        return;
-    }
-    state.groupes = data || [];
-}
-
-async function loadRecentInvoices() {
-    showToast('Chargement des factures...', 'info');
-    
-    const data = await apiFetch('/factures/?limit=6');
-    if (data?.error) {
-        showToast('Erreur chargement factures: ' + data.message, 'error');
-        loadSampleHistory();
-        return;
-    }
-    
-    state.invoiceHistory = data.results || data || [];
-    renderHistory();
-}
-
-// ============================================
-// SERVICE MANAGEMENT
-// ============================================
-function addService(description = '', price = '', qty = 1) {
-    const id = Date.now() + Math.random().toString(36).substr(2, 9);
-    const service = {
-        id,
-        description: description || '',
-        price: parseFloat(price) || 0,
-        qty: parseInt(qty) || 1
-    };
-    state.services.push(service);
-    renderServices();
+// ============================================================
+// GESTION DES SERVICES
+// ============================================================
+function addService(description = '', qty = 1, price = 0) {
+    const id = Date.now();
+    state.services.push({ id, description, qty, price });
+    renderServicesList();
     updatePreview();
 }
 
 function removeService(id) {
     state.services = state.services.filter(s => s.id !== id);
-    renderServices();
+    renderServicesList();
     updatePreview();
 }
 
 function updateService(id, field, value) {
-    const service = state.services.find(s => s.id === id);
-    if (!service) return;
-
-    if (field === 'price' || field === 'qty') {
-        service[field] = parseFloat(value) || 0;
-    } else {
-        service[field] = value;
-    }
+    const s = state.services.find(x => x.id === id);
+    if (!s) return;
+    s[field] = field === 'description' ? value : parseFloat(value) || 0;
     updatePreview();
 }
 
-function renderServices() {
+function renderServicesList() {
     const container = document.getElementById('servicesList');
-    
-    if (state.services.length === 0) {
-        container.innerHTML = '<p style="color: #64748b; text-align: center; padding: 1rem;">Aucun service ajouté</p>';
+    if (!container) return;
+
+    if (!state.services.length) {
+        container.innerHTML = `
+            <div style="text-align:center;padding:1.5rem;color:#94a3b8;font-size:.875rem;">
+                Aucun service ajouté. Cliquez sur "+ Ajouter un service".
+            </div>`;
         return;
     }
 
     container.innerHTML = state.services.map(s => `
-        <div class="service-item" data-id="${s.id}">
-            <input type="text" 
-                   class="service-input" 
-                   placeholder="Description du service" 
-                   value="${escapeHtml(s.description)}" 
-                   oninput="updateService('${s.id}', 'description', this.value)">
-            <input type="number" 
-                   class="service-input service-price" 
-                   placeholder="Prix" 
-                   value="${s.price || ''}" 
-                   min="0"
-                   step="100"
-                   oninput="updateService('${s.id}', 'price', this.value)">
-            <input type="number" 
-                   class="service-input service-qty" 
-                   placeholder="Qté" 
-                   value="${s.qty}" 
-                   min="1"
-                   oninput="updateService('${s.id}', 'qty', this.value)">
-            <button class="btn-remove" onclick="removeService('${s.id}')" title="Supprimer">
-                <i class="fas fa-trash"></i>
-            </button>
-        </div>
-    `).join('');
+        <div class="service-item" data-id="${s.id}" style="
+            display:grid; grid-template-columns:1fr 80px 100px 36px;
+            gap:.5rem; align-items:center; margin-bottom:.75rem;
+            padding:.75rem; background:#f8fafc; border-radius:10px;
+            border:1px solid #e2e8f0;">
+            <input type="text" value="${s.description}"
+                   placeholder="Description du service"
+                   onchange="updateService(${s.id},'description',this.value)"
+                   oninput="updateService(${s.id},'description',this.value)"
+                   style="padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;
+                          font-size:.875rem;outline:none;width:100%;box-sizing:border-box;">
+            <input type="number" value="${s.qty}" min="1" placeholder="Qté"
+                   onchange="updateService(${s.id},'qty',this.value)"
+                   style="padding:8px;border:1.5px solid #e2e8f0;border-radius:8px;
+                          font-size:.875rem;outline:none;text-align:center;width:100%;box-sizing:border-box;">
+            <input type="number" value="${s.price}" min="0" placeholder="Prix DA"
+                   onchange="updateService(${s.id},'price',this.value)"
+                   style="padding:8px;border:1.5px solid #e2e8f0;border-radius:8px;
+                          font-size:.875rem;outline:none;text-align:right;width:100%;box-sizing:border-box;">
+            <button onclick="removeService(${s.id})"
+                    style="width:36px;height:36px;border:none;background:#fee2e2;color:#dc2626;
+                           border-radius:8px;cursor:pointer;font-size:1rem;display:flex;
+                           align-items:center;justify-content:center;">×</button>
+        </div>`).join('');
 }
 
-// ============================================
-// TEMPLATE SYSTEM
-// ============================================
-function changeTemplate(templateNum) {
-    state.currentTemplate = templateNum;
-    
-    document.querySelectorAll('.template-option').forEach((el, index) => {
-        el.classList.toggle('active', index + 1 === templateNum);
-    });
-    
+// ============================================================
+// CALCULS
+// ============================================================
+function calcTotals() {
+    const subtotal  = state.services.reduce((sum, s) => sum + (s.qty * s.price), 0);
+    const discount  = parseFloat(document.getElementById('discount')?.value) || 0;
+    const tva       = parseFloat(document.getElementById('tva')?.value) || 0;
+    const discountAmt = subtotal * (discount / 100);
+    const afterDiscount = subtotal - discountAmt;
+    const tvaAmt    = afterDiscount * (tva / 100);
+    const total     = afterDiscount + tvaAmt;
+    return { subtotal, discount, discountAmt, tva, tvaAmt, total };
+}
+
+// ============================================================
+// CHANGER TEMPLATE
+// ============================================================
+function changeTemplate(num) {
+    state.currentTemplate = num;
+    document.querySelectorAll('.template-option').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.template-${num}`)?.classList.add('active');
     updatePreview();
 }
 
-// ============================================
-// PREVIEW GENERATION
-// ============================================
+// ============================================================
+// MISE À JOUR DE L'APERÇU
+// ============================================================
 function updatePreview() {
-    const data = collectFormData();
-    const calculations = calculateTotals();
     const preview = document.getElementById('invoicePreview');
-    
-    preview.innerHTML = generateInvoiceHTML(data, calculations);
-}
+    if (!preview) return;
 
-function collectFormData() {
-    return {
-        invoiceNum: getValue('invoiceNum'),
-        date: getValue('invoiceDate'),
-        dueDate: getValue('dueDate'),
-        status: getValue('invoiceStatus'),
-        clientName: getValue('clientName'),
-        clientEmail: getValue('clientEmail'),
-        clientPhone: getValue('clientPhone'),
-        clientAddress: getValue('clientAddress'),
-        discount: parseFloat(getValue('discount')) || 0,
-        tva: parseFloat(getValue('tva')) || 0,
-        notes: getValue('notes')
+    const tpl = TEMPLATES[state.currentTemplate];
+    const { subtotal, discount, discountAmt, tva, tvaAmt, total } = calcTotals();
+
+    const num     = document.getElementById('invoiceNum')?.value    || nextInvoiceNum();
+    const date    = document.getElementById('invoiceDate')?.value   || today();
+    const due     = document.getElementById('dueDate')?.value       || addDays(today(), 30);
+    const status  = document.getElementById('invoiceStatus')?.value || 'en attente';
+    const name    = document.getElementById('clientName')?.value    || 'Client';
+    const email   = document.getElementById('clientEmail')?.value   || '';
+    const phone   = document.getElementById('clientPhone')?.value   || '';
+    const address = document.getElementById('clientAddress')?.value || '';
+    const notes   = document.getElementById('notes')?.value         || '';
+
+    const statusColors = {
+        'payée':      { bg:'#d1fae5', color:'#065f46', label:'✓ Payée' },
+        'en attente': { bg:'#fef3c7', color:'#92400e', label:'⏳ En attente' },
+        'en retard':  { bg:'#fee2e2', color:'#991b1b', label:'⚠ En retard' },
     };
-}
+    const sc = statusColors[status] || statusColors['en attente'];
 
-function getValue(id) {
-    const el = document.getElementById(id);
-    return el ? el.value : '';
-}
+    const servicesRows = state.services.length
+        ? state.services.map(s => `
+            <tr>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:.875rem;">${s.description || '—'}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;font-size:.875rem;">${s.qty}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:.875rem;">${fmtDA(s.price)}</td>
+                <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:600;font-size:.875rem;">${fmtDA(s.qty * s.price)}</td>
+            </tr>`).join('')
+        : `<tr><td colspan="4" style="padding:2rem;text-align:center;color:#94a3b8;font-size:.875rem;">Aucun service</td></tr>`;
 
-function calculateTotals() {
-    const subtotal = state.services.reduce((sum, s) => sum + (s.price * s.qty), 0);
-    const discountPercent = parseFloat(getValue('discount')) || 0;
-    const discountAmount = subtotal * (discountPercent / 100);
-    const afterDiscount = subtotal - discountAmount;
-    const tvaPercent = parseFloat(getValue('tva')) || 0;
-    const tvaAmount = afterDiscount * (tvaPercent / 100);
-    const total = afterDiscount + tvaAmount;
+    preview.innerHTML = `
+        <div id="printableInvoice" style="
+            background:white; max-width:720px; margin:0 auto;
+            box-shadow:0 4px 24px rgba(0,0,0,.1); border-radius:16px; overflow:hidden;
+            font-family:'Segoe UI',sans-serif; color:#1e293b;">
 
-    return {
-        subtotal,
-        discountAmount,
-        afterDiscount,
-        tvaAmount,
-        total
-    };
-}
-
-function generateInvoiceHTML(data, calc) {
-    const template = TEMPLATES[state.currentTemplate];
-    
-    const etudiant = state.etudiants.find(e => {
-        const nom = `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.trim();
-        return nom === data.clientName;
-    });
-    
-    const groupeInfo = etudiant && etudiant.id_groupe ? 
-        state.groupes.find(g => g.id === etudiant.id_groupe) : null;
-    
-    return `
-        <div class="invoice-header" style="background: ${template}">
-            <div class="invoice-header-content">
-                <div class="invoice-brand">
-                    <div class="brand-logo">
-                        <i class="fas fa-graduation-cap"></i>
+            <!-- En-tête coloré -->
+            <div style="background:linear-gradient(135deg,${tpl.primary},${tpl.secondary});
+                        padding:2rem; color:white; position:relative;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+                    <div>
+                        <div style="font-size:1.8rem;font-weight:800;letter-spacing:-.5px;">🎓 Centre de Langues</div>
+                        <div style="opacity:.85;font-size:.875rem;margin-top:4px;">Secrétariat • Alger, Algérie</div>
+                        <div style="opacity:.75;font-size:.8rem;margin-top:2px;">contact@centrelangues.dz</div>
                     </div>
-                    <div class="brand-info">
-                        <h3>Centre de Langues</h3>
-                        <p>Formation & Éducation<br>Alger, Algérie</p>
-                    </div>
-                </div>
-                <div class="invoice-meta">
-                    <div class="invoice-number">FACTURE ${escapeHtml(data.invoiceNum)}</div>
-                    <div class="invoice-date">Date: ${formatDate(data.date)}</div>
-                    <div class="invoice-date">Échéance: ${formatDate(data.dueDate)}</div>
-                    <span class="invoice-status">${escapeHtml(data.status)}</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="invoice-body">
-            <div class="invoice-parties">
-                <div class="party-section">
-                    <h4>Facturer à</h4>
-                    <div class="party-name">${escapeHtml(data.clientName) || 'Client'}</div>
-                    <div class="party-details">
-                        ${escapeHtml(data.clientEmail) ? escapeHtml(data.clientEmail) + '<br>' : ''}
-                        ${escapeHtml(data.clientPhone) ? escapeHtml(data.clientPhone) + '<br>' : ''}
-                        ${escapeHtml(data.clientAddress) ? escapeHtml(data.clientAddress).replace(/\n/g, '<br>') : ''}
-                    </div>
-                </div>
-                <div class="party-section">
-                    <h4>Informations</h4>
-                    <div class="party-details">
-                        ${etudiant ? `
-                            <strong>N° Étudiant:</strong> ETU-${String(etudiant.id).padStart(4, '0')}<br>
-                        ` : ''}
-                        ${groupeInfo ? `
-                            <strong>Groupe:</strong> ${escapeHtml(groupeInfo.nom_groupe)}<br>
-                            <strong>Niveau:</strong> ${escapeHtml(groupeInfo.niveau)}<br>
-                        ` : ''}
-                        ${etudiant?.professeur ? `
-                            <strong>Professeur:</strong> ${escapeHtml(etudiant.professeur)}<br>
-                        ` : '<strong>Professeur:</strong> Mme. Dupont'}
+                    <div style="text-align:right;">
+                        <div style="font-size:1.5rem;font-weight:800;">FACTURE</div>
+                        <div style="opacity:.9;font-size:1rem;margin-top:4px;">${num}</div>
+                        <div style="margin-top:8px;display:inline-block;
+                                    background:${sc.bg};color:${sc.color};
+                                    padding:4px 14px;border-radius:20px;font-size:.8rem;font-weight:700;">
+                            ${sc.label}
+                        </div>
                     </div>
                 </div>
             </div>
-            
-            <div class="invoice-table-container">
-                <table class="invoice-table">
+
+            <!-- Infos date + client -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;padding:1.5rem 2rem;
+                        background:${tpl.bg};border-bottom:2px solid ${tpl.primary}20;">
+                <div>
+                    <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-weight:700;margin-bottom:.5rem;">
+                        Informations
+                    </div>
+                    <table style="font-size:.85rem;">
+                        <tr><td style="color:#64748b;padding:2px 0;padding-right:1rem;">Date :</td>
+                            <td style="font-weight:600;">${fmtDate(date)}</td></tr>
+                        <tr><td style="color:#64748b;padding:2px 0;padding-right:1rem;">Échéance :</td>
+                            <td style="font-weight:600;color:${status==='en retard'?'#dc2626':'inherit'}">${fmtDate(due)}</td></tr>
+                    </table>
+                </div>
+                <div>
+                    <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-weight:700;margin-bottom:.5rem;">
+                        Facturer à
+                    </div>
+                    <div style="font-weight:700;font-size:1rem;">${name}</div>
+                    ${email   ? `<div style="color:#64748b;font-size:.85rem;margin-top:2px;">📧 ${email}</div>`   : ''}
+                    ${phone   ? `<div style="color:#64748b;font-size:.85rem;margin-top:2px;">📞 ${phone}</div>`   : ''}
+                    ${address ? `<div style="color:#64748b;font-size:.85rem;margin-top:2px;">📍 ${address}</div>` : ''}
+                </div>
+            </div>
+
+            <!-- Tableau services -->
+            <div style="padding:1.5rem 2rem;">
+                <table style="width:100%;border-collapse:collapse;">
                     <thead>
-                        <tr>
-                            <th>Description</th>
-                            <th class="text-center">Qté</th>
-                            <th class="text-right">Prix Unitaire</th>
-                            <th class="text-right">Total</th>
+                        <tr style="background:${tpl.primary};color:white;border-radius:8px;">
+                            <th style="padding:12px 14px;text-align:left;font-size:.8rem;font-weight:700;border-radius:8px 0 0 8px;">DESCRIPTION</th>
+                            <th style="padding:12px 14px;text-align:center;font-size:.8rem;font-weight:700;">QTÉ</th>
+                            <th style="padding:12px 14px;text-align:right;font-size:.8rem;font-weight:700;">P.U.</th>
+                            <th style="padding:12px 14px;text-align:right;font-size:.8rem;font-weight:700;border-radius:0 8px 8px 0;">TOTAL</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        ${state.services.map(s => `
-                            <tr>
-                                <td class="item-description">
-                                    <strong>${escapeHtml(s.description) || 'Service'}</strong>
-                                    <span>Cours de langue</span>
-                                </td>
-                                <td class="text-center">${s.qty}</td>
-                                <td class="text-right">${formatMoney(s.price)} ${CONFIG.currency}</td>
-                                <td class="text-right"><strong>${formatMoney(s.price * s.qty)} ${CONFIG.currency}</strong></td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
+                    <tbody>${servicesRows}</tbody>
                 </table>
             </div>
-            
-            <div class="invoice-totals">
-                <div class="total-row">
-                    <span>Sous-total</span>
-                    <span>${formatMoney(calc.subtotal)} ${CONFIG.currency}</span>
-                </div>
-                ${data.discount > 0 ? `
-                    <div class="total-row discount">
-                        <span>Remise (${data.discount}%)</span>
-                        <span>-${formatMoney(calc.discountAmount)} ${CONFIG.currency}</span>
+
+            <!-- Totaux -->
+            <div style="padding:0 2rem 2rem;display:flex;justify-content:flex-end;">
+                <div style="width:280px;">
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;
+                                border-bottom:1px solid #f1f5f9;font-size:.875rem;">
+                        <span style="color:#64748b;">Sous-total</span>
+                        <span style="font-weight:600;">${fmtDA(subtotal)}</span>
                     </div>
-                ` : ''}
-                <div class="total-row">
-                    <span>Total HT</span>
-                    <span>${formatMoney(calc.afterDiscount)} ${CONFIG.currency}</span>
-                </div>
-                <div class="total-row">
-                    <span>TVA (${data.tva}%)</span>
-                    <span>${formatMoney(calc.tvaAmount)} ${CONFIG.currency}</span>
-                </div>
-                <div class="total-row grand-total">
-                    <span>TOTAL TTC</span>
-                    <span>${formatMoney(calc.total)} ${CONFIG.currency}</span>
+                    ${discount > 0 ? `
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;
+                                border-bottom:1px solid #f1f5f9;font-size:.875rem;">
+                        <span style="color:#64748b;">Remise (${discount}%)</span>
+                        <span style="font-weight:600;color:#dc2626;">- ${fmtDA(discountAmt)}</span>
+                    </div>` : ''}
+                    ${tva > 0 ? `
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;
+                                border-bottom:1px solid #f1f5f9;font-size:.875rem;">
+                        <span style="color:#64748b;">TVA (${tva}%)</span>
+                        <span style="font-weight:600;">${fmtDA(tvaAmt)}</span>
+                    </div>` : ''}
+                    <div style="display:flex;justify-content:space-between;padding:12px 16px;
+                                background:${tpl.primary};color:white;border-radius:10px;margin-top:.75rem;">
+                        <span style="font-weight:700;font-size:1rem;">TOTAL</span>
+                        <span style="font-weight:800;font-size:1.1rem;">${fmtDA(total)}</span>
+                    </div>
                 </div>
             </div>
-            
-            ${data.notes ? `
-                <div style="margin-top: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 8px; font-size: 0.9rem; color: #64748b;">
-                    <strong>Notes:</strong> ${escapeHtml(data.notes).replace(/\n/g, '<br>')}
-                </div>
-            ` : ''}
-        </div>
-        
-        <div class="invoice-footer">
-            <div class="payment-info">
-                <h4>Coordonnées bancaires</h4>
-                <p>Centre de Langues SARL<br>RIB: 007 99999 9999999999 99<br>Banque: BADR</p>
+
+            <!-- Notes -->
+            ${notes ? `
+            <div style="margin:0 2rem 2rem;padding:1rem 1.25rem;background:${tpl.bg};
+                        border-left:4px solid ${tpl.primary};border-radius:0 8px 8px 0;">
+                <div style="font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;
+                            color:${tpl.primary};font-weight:700;margin-bottom:.5rem;">Notes</div>
+                <p style="font-size:.875rem;color:#475569;margin:0;line-height:1.6;">${notes}</p>
+            </div>` : ''}
+
+            <!-- Pied de page -->
+            <div style="background:#f8fafc;border-top:2px solid ${tpl.primary}20;
+                        padding:1rem 2rem;text-align:center;
+                        font-size:.75rem;color:#94a3b8;">
+                Merci pour votre confiance • Centre de Langues — ${new Date().getFullYear()}
             </div>
-            <div class="qr-placeholder">
-                <i class="fas fa-qrcode"></i>
-            </div>
-        </div>
-    `;
+        </div>`;
 }
 
-// ============================================
-// STUDENT SELECTION (IMPROVED WITH MODAL)
-// ============================================
-function openStudentSelector() {
-    const existingModal = document.querySelector('.modal-overlay');
-    if (existingModal) existingModal.remove();
-    
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    
-    const loadingHtml = `
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Sélectionner un étudiant</h3>
-                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
-            </div>
-            <div class="modal-body" style="padding: 3rem; text-align: center;">
-                <div class="loading-spinner" style="width: 40px; height: 40px; border-color: #e2e8f0; border-top-color: var(--primary); margin: 0 auto 1rem;"></div>
-                <p style="color: #64748b;">Chargement des étudiants...</p>
-            </div>
-        </div>
-    `;
-    
-    modal.innerHTML = loadingHtml;
-    document.body.appendChild(modal);
-    
-    if (state.etudiants.length === 0) {
-        loadEtudiants().then(() => renderStudentList(modal));
-    } else {
-        renderStudentList(modal);
+// ============================================================
+// IMPRIMER
+// ============================================================
+function printInvoice() {
+    const content = document.getElementById('printableInvoice');
+    if (!content) { showToast('Générez d\'abord une facture.', 'warning'); return; }
+
+    const win = window.open('', '_blank');
+    win.document.write(`<!DOCTYPE html><html lang="fr"><head>
+        <meta charset="UTF-8">
+        <title>Facture - ${document.getElementById('invoiceNum')?.value || 'FAC'}</title>
+        <style>
+            body { margin:0; padding:20px; font-family:'Segoe UI',sans-serif; }
+            @media print { body { padding:0; } }
+        </style>
+    </head><body>${content.outerHTML}<script>window.onload=()=>window.print();<\/script></body></html>`);
+    win.document.close();
+}
+
+// ============================================================
+// GÉNÉRER PDF (via impression)
+// ============================================================
+function generatePDF() {
+    showToast('Ouverture de la fenêtre d\'impression PDF...', 'info');
+    printInvoice();
+}
+
+// ============================================================
+// SAUVEGARDER FACTURE
+// ============================================================
+async function saveInvoice() {
+    const name   = document.getElementById('clientName')?.value?.trim();
+    const total  = calcTotals().total;
+
+    if (!name) {
+        showToast('Ajoutez le nom du client avant de sauvegarder.', 'warning');
+        document.getElementById('clientName')?.focus();
+        return;
     }
+    if (!state.services.length) {
+        showToast('Ajoutez au moins un service.', 'warning');
+        return;
+    }
+
+    const invoice = {
+        id:          Date.now(),
+        num:         document.getElementById('invoiceNum')?.value    || nextInvoiceNum(),
+        date:        document.getElementById('invoiceDate')?.value   || today(),
+        due:         document.getElementById('dueDate')?.value       || '',
+        status:      document.getElementById('invoiceStatus')?.value || 'en attente',
+        client:      name,
+        email:       document.getElementById('clientEmail')?.value   || '',
+        phone:       document.getElementById('clientPhone')?.value   || '',
+        address:     document.getElementById('clientAddress')?.value || '',
+        services:    [...state.services],
+        discount:    parseFloat(document.getElementById('discount')?.value) || 0,
+        tva:         parseFloat(document.getElementById('tva')?.value) || 0,
+        notes:       document.getElementById('notes')?.value         || '',
+        total,
+        template:    state.currentTemplate,
+        savedAt:     new Date().toISOString(),
+    };
+
+    // Sauvegarder en localStorage
+    const history = JSON.parse(localStorage.getItem('factures_history') || '[]');
+    history.unshift(invoice);
+    localStorage.setItem('factures_history', JSON.stringify(history.slice(0, 50)));
+
+    // Essayer aussi de sauvegarder en DB via paiement (si étudiant sélectionné)
+    await trySaveToAPI(invoice);
+
+    state.savedInvoices = history;
+    state.invoiceCounter++;
+
+    showToast(`✅ Facture ${invoice.num} sauvegardée !`, 'success');
+    loadHistory();
+
+    // Incrémenter le numéro pour la prochaine facture
+    const numEl = document.getElementById('invoiceNum');
+    if (numEl) numEl.value = nextInvoiceNum();
 }
 
-function renderStudentList(modal) {
-    const studentsList = state.etudiants.map(e => {
-        const nom = `${e.user?.first_name || ''} ${e.user?.last_name || ''}`.trim();
-        const email = e.user?.email || '';
-        const tel = e.telephone || '';
-        const groupe = e.groupe_nom || (e.id_groupe ? state.groupes.find(g => g.id === e.id_groupe)?.nom_groupe : '');
-        
+async function trySaveToAPI(invoice) {
+    // Si un étudiant a été sélectionné et que la facture a des services → créer un paiement
+    const etudiantId = document.getElementById('clientName')?.dataset?.etudiantId;
+    if (!etudiantId || !invoice.services.length) return;
+
+    await apiFetch('/paiements/', {
+        method: 'POST',
+        body: JSON.stringify({
+            etudiant:        parseInt(etudiantId),
+            montant_du:      invoice.total,
+            montant_paye:    invoice.status === 'payée' ? invoice.total : 0,
+            mode_paiement:   'Virement',
+            date_paiement:   invoice.date,
+            periode:         invoice.services[0]?.description || 'Facture',
+            statut_paiement: invoice.status === 'payée' ? 'Paye'
+                           : invoice.status === 'en retard' ? 'Impaye' : 'En_attente',
+            reference_paiement: invoice.num,
+        }),
+    });
+}
+
+// ============================================================
+// CHARGER HISTORIQUE
+// ============================================================
+function loadHistory() {
+    const history = JSON.parse(localStorage.getItem('factures_history') || '[]');
+    state.savedInvoices = history;
+    renderHistory(history);
+}
+
+function renderHistory(history) {
+    const grid = document.getElementById('historyGrid');
+    if (!grid) return;
+
+    if (!history.length) {
+        grid.innerHTML = `
+            <div style="grid-column:1/-1;text-align:center;padding:2rem;color:#94a3b8;">
+                <i class="fas fa-file-invoice" style="font-size:2.5rem;margin-bottom:1rem;display:block;opacity:.4;"></i>
+                <p>Aucune facture sauvegardée</p>
+            </div>`;
+        return;
+    }
+
+    const statusColors = {
+        'payée':      '#059669',
+        'en attente': '#d97706',
+        'en retard':  '#dc2626',
+    };
+
+    grid.innerHTML = history.slice(0, 12).map(inv => {
+        const tpl   = TEMPLATES[inv.template || 1];
+        const color = statusColors[inv.status] || '#64748b';
         return `
-            <div class="student-option" onclick="selectStudent('${e.id}', '${escapeHtml(nom)}', '${escapeHtml(email)}', '${escapeHtml(tel)}')">
-                <div class="student-name">${escapeHtml(nom)}</div>
-                <div class="student-info">
-                    ${email ? escapeHtml(email) + ' | ' : ''}
-                    ${tel ? escapeHtml(tel) : ''}
-                    ${groupe ? '<br>Groupe: ' + escapeHtml(groupe) : ''}
+            <div style="background:white;border-radius:12px;padding:1.25rem;
+                        box-shadow:0 2px 8px rgba(0,0,0,.08);border:1px solid #f1f5f9;
+                        cursor:pointer;transition:all .2s;border-top:4px solid ${tpl.primary};"
+                 onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 20px rgba(0,0,0,.12)'"
+                 onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(0,0,0,.08)'"
+                 onclick="loadInvoice(${inv.id})">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem;">
+                    <div>
+                        <div style="font-weight:700;font-size:.9rem;color:#1e293b;">${inv.num}</div>
+                        <div style="font-size:.8rem;color:#64748b;margin-top:2px;">${inv.client}</div>
+                    </div>
+                    <span style="background:${color}20;color:${color};padding:2px 8px;
+                                 border-radius:20px;font-size:.75rem;font-weight:700;white-space:nowrap;">
+                        ${inv.status}
+                    </span>
                 </div>
-            </div>
-        `;
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:.75rem;color:#94a3b8;">${fmtDate(inv.date)}</span>
+                    <span style="font-weight:800;font-size:1rem;color:${tpl.primary};">${fmtDA(inv.total)}</span>
+                </div>
+                <div style="display:flex;gap:.5rem;margin-top:.75rem;">
+                    <button onclick="event.stopPropagation();loadInvoice(${inv.id})"
+                            style="flex:1;padding:5px;border:1px solid #e2e8f0;border-radius:6px;
+                                   background:white;color:#475569;cursor:pointer;font-size:.75rem;">
+                        <i class="fas fa-eye"></i> Voir
+                    </button>
+                    <button onclick="event.stopPropagation();printFromHistory(${inv.id})"
+                            style="flex:1;padding:5px;border:none;border-radius:6px;
+                                   background:${tpl.primary};color:white;cursor:pointer;font-size:.75rem;">
+                        <i class="fas fa-print"></i> Print
+                    </button>
+                    <button onclick="event.stopPropagation();deleteInvoice(${inv.id})"
+                            style="padding:5px 8px;border:1px solid #fee2e2;border-radius:6px;
+                                   background:white;color:#dc2626;cursor:pointer;font-size:.75rem;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>`;
     }).join('');
-    
-    modal.querySelector('.modal-body').innerHTML = studentsList || `
-        <div class="empty-state">
-            <i class="fas fa-user-slash"></i>
-            <p>Aucun étudiant trouvé</p>
-        </div>
-    `;
+}
+
+// ============================================================
+// CHARGER UNE FACTURE DEPUIS L'HISTORIQUE
+// ============================================================
+function loadInvoice(id) {
+    const inv = state.savedInvoices.find(x => x.id === id);
+    if (!inv) return;
+
+    // Remplir les champs du formulaire
+    const set = (elId, val) => {
+        const el = document.getElementById(elId);
+        if (el) el.value = val || '';
+    };
+
+    set('invoiceNum',    inv.num);
+    set('invoiceDate',   inv.date);
+    set('dueDate',       inv.due);
+    set('invoiceStatus', inv.status);
+    set('clientName',    inv.client);
+    set('clientEmail',   inv.email);
+    set('clientPhone',   inv.phone);
+    set('clientAddress', inv.address);
+    set('discount',      inv.discount);
+    set('tva',           inv.tva);
+    set('notes',         inv.notes);
+
+    state.services        = inv.services.map(s => ({ ...s, id: s.id || Date.now() + Math.random() }));
+    state.currentTemplate = inv.template || 1;
+
+    // Mettre à jour les sélecteurs visuels
+    document.querySelectorAll('.template-option').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.template-${state.currentTemplate}`)?.classList.add('active');
+
+    renderServicesList();
+    updatePreview();
+
+    // Scroll vers le haut
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast(`Facture ${inv.num} chargée.`, 'info');
+}
+
+// ============================================================
+// IMPRIMER DEPUIS L'HISTORIQUE
+// ============================================================
+function printFromHistory(id) {
+    loadInvoice(id);
+    setTimeout(() => printInvoice(), 300);
+}
+
+// ============================================================
+// SUPPRIMER UNE FACTURE
+// ============================================================
+function deleteInvoice(id) {
+    if (!confirm('Supprimer cette facture ?')) return;
+    const history = state.savedInvoices.filter(x => x.id !== id);
+    localStorage.setItem('factures_history', JSON.stringify(history));
+    state.savedInvoices = history;
+    renderHistory(history);
+    showToast('Facture supprimée.', 'info');
+}
+
+// ============================================================
+// RESET FORMULAIRE
+// ============================================================
+function resetForm() {
+    state.services = [];
+    state.invoiceCounter++;
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    set('invoiceNum',    nextInvoiceNum());
+    set('invoiceDate',   today());
+    set('dueDate',       addDays(today(), 30));
+    set('invoiceStatus', 'en attente');
+    set('clientName',    '');
+    set('clientEmail',   '');
+    set('clientPhone',   '');
+    set('clientAddress', '');
+    set('discount',      '0');
+    set('tva',           '19');
+    set('notes',         '');
+
+    // Réinitialiser l'attribut data-etudiantId
+    const nameEl = document.getElementById('clientName');
+    if (nameEl) delete nameEl.dataset.etudiantId;
+
+    addService('Cours de Langue - Mensualité', 1, 8000);
+    showToast('Nouveau formulaire prêt.', 'info');
+}
+
+// ============================================================
+// SÉLECTEUR D'ÉTUDIANT (depuis la DB)
+// ============================================================
+async function openStudentSelector() {
+    // Charger les étudiants depuis l'API
+    if (!state.students.length) {
+        const data = await apiFetch('/etudiants/');
+        if (!data?.error) {
+            state.students = Array.isArray(data) ? data : (data.results || []);
+        }
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'studentModal';
+    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.5);
+        display:flex;align-items:center;justify-content:center;z-index:2000;`;
+
+    modal.innerHTML = `
+        <div style="background:white;border-radius:20px;padding:2rem;width:90%;max-width:520px;
+                    max-height:80vh;display:flex;flex-direction:column;animation:fadeIn .3s ease;"
+             onclick="event.stopPropagation()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+                <h3 style="font-size:1.1rem;font-weight:700;color:#1e293b;">
+                    <i class="fas fa-search" style="color:#6366f1;margin-right:8px;"></i>
+                    Sélectionner un étudiant
+                </h3>
+                <button onclick="document.getElementById('studentModal').remove()"
+                        style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#94a3b8;">×</button>
+            </div>
+            <input type="text" placeholder="🔍 Rechercher par nom ou email..."
+                   id="studentSearch"
+                   style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;
+                          font-size:.9rem;outline:none;box-sizing:border-box;margin-bottom:1rem;"
+                   oninput="filterStudentList(this.value)">
+            <div id="studentList" style="overflow-y:auto;flex:1;border:1px solid #f1f5f9;border-radius:10px;">
+                ${state.students.length
+                    ? state.students.map(s => {
+                        const nom   = s.user?.nom_complet || `${s.user?.first_name||''} ${s.user?.last_name||''}`.trim() || '—';
+                        const email = s.user?.email || '—';
+                        const tel   = s.user?.telephone || '—';
+                        return `
+                            <div class="student-sel-item" data-id="${s.id}"
+                                 data-nom="${nom}" data-email="${email}" data-tel="${tel}"
+                                 onclick="selectStudent(${s.id},'${nom.replace(/'/g,"\\'")}','${email}','${tel}')"
+                                 style="display:flex;align-items:center;gap:.75rem;padding:.875rem 1rem;
+                                        cursor:pointer;border-bottom:1px solid #f8fafc;transition:background .15s;"
+                                 onmouseover="this.style.background='#f8fafc'"
+                                 onmouseout="this.style.background='white'">
+                                <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;
+                                            background:linear-gradient(135deg,#6366f1,#8b5cf6);
+                                            display:flex;align-items:center;justify-content:center;
+                                            color:white;font-weight:700;font-size:.85rem;">
+                                    ${nom.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2)}
+                                </div>
+                                <div style="min-width:0;">
+                                    <div style="font-weight:600;color:#1e293b;font-size:.9rem;">${nom}</div>
+                                    <div style="color:#64748b;font-size:.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                        ${email} ${tel !== '—' ? '· '+tel : ''}
+                                    </div>
+                                </div>
+                                <span style="margin-left:auto;background:#dbeafe;color:#1e40af;
+                                             padding:2px 8px;border-radius:20px;font-size:.75rem;font-weight:700;flex-shrink:0;">
+                                    ${s.niveau_actuel || '—'}
+                                </span>
+                            </div>`;
+                    }).join('')
+                    : `<div style="text-align:center;padding:2rem;color:#94a3b8;">
+                           <i class="fas fa-user-slash" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>
+                           Aucun étudiant chargé depuis l'API
+                       </div>`}
+            </div>
+        </div>`;
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    setTimeout(() => document.getElementById('studentSearch')?.focus(), 100);
+}
+
+function filterStudentList(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll('.student-sel-item').forEach(item => {
+        const text = (item.dataset.nom + item.dataset.email).toLowerCase();
+        item.style.display = text.includes(q) ? 'flex' : 'none';
+    });
 }
 
 function selectStudent(id, nom, email, tel) {
-    document.getElementById('clientName').value = nom;
-    document.getElementById('clientEmail').value = email;
-    document.getElementById('clientPhone').value = tel;
-    
-    document.querySelector('.modal-overlay')?.remove();
-    
+    const nameEl  = document.getElementById('clientName');
+    const emailEl = document.getElementById('clientEmail');
+    const phoneEl = document.getElementById('clientPhone');
+
+    if (nameEl)  { nameEl.value = nom; nameEl.dataset.etudiantId = id; }
+    if (emailEl)   emailEl.value = email !== '—' ? email : '';
+    if (phoneEl)   phoneEl.value = tel   !== '—' ? tel   : '';
+
+    // Charger aussi les infos de paiement récentes pour pré-remplir
+    loadStudentPaymentInfo(id);
+
+    document.getElementById('studentModal')?.remove();
     updatePreview();
-    showToast('Étudiant sélectionné', 'success');
+    showToast(`Étudiant ${nom} sélectionné.`, 'success');
 }
 
-// ============================================
-// SAVE INVOICE TO DATABASE
-// ============================================
-async function saveInvoice() {
-    const data = collectFormData();
-    const calc = calculateTotals();
-    
-    // Validation
-    if (!data.clientName) {
-        showToast('Veuillez entrer le nom du client', 'warning');
-        document.getElementById('clientName').focus();
-        return;
-    }
-    if (state.services.length === 0 || state.services.every(s => !s.description)) {
-        showToast('Veuillez ajouter au moins un service', 'warning');
-        return;
-    }
-    
-    // Show loading state on button
-    const saveBtn = document.querySelector('.btn-success');
-    const originalContent = saveBtn.innerHTML;
-    saveBtn.innerHTML = '<div class="loading-spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> Sauvegarde...';
-    saveBtn.disabled = true;
-    
-    const payload = {
-        numero_facture: data.invoiceNum,
-        date_emission: data.date,
-        date_echeance: data.dueDate,
-        statut: data.status,
-        client_nom: data.clientName,
-        client_email: data.clientEmail,
-        client_telephone: data.clientPhone,
-        client_adresse: data.clientAddress,
-        services: state.services.filter(s => s.description).map(s => ({
-            description: s.description,
-            quantite: s.qty,
-            prix_unitaire: s.price,
-            total: s.price * s.qty
-        })),
-        remise_pourcentage: data.discount,
-        remise_montant: calc.discountAmount,
-        tva_pourcentage: data.tva,
-        tva_montant: calc.tvaAmount,
-        total_ht: calc.afterDiscount,
-        total_ttc: calc.total,
-        notes: data.notes,
-        template: state.currentTemplate
-    };
-    
-    const result = await apiFetch('/factures/', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-    });
-    
-    // Restore button
-    saveBtn.innerHTML = originalContent;
-    saveBtn.disabled = false;
-    
-    if (result?.error) {
-        showToast('Erreur: ' + result.message, 'error');
-        return;
-    }
-    
-    state.currentInvoiceId = result.id;
-    showToast('Facture sauvegardée avec succès!', 'success');
-    
-    // Refresh history
-    await loadRecentInvoices();
-    
-    return result;
-}
+async function loadStudentPaymentInfo(etudiantId) {
+    const paiements = await apiFetch(`/paiements/?etudiant=${etudiantId}`);
+    if (paiements?.error || !paiements.length) return;
 
-// ============================================
-// ACTIONS
-// ============================================
-async function resetForm() {
-    if (state.services.some(s => s.description) && !confirm('Créer une nouvelle facture ? Les données actuelles seront perdues.')) {
-        return;
-    }
-    
-    const newNum = await generateInvoiceNumber();
-    document.getElementById('invoiceNum').value = newNum;
-    
-    document.getElementById('clientName').value = '';
-    document.getElementById('clientEmail').value = '';
-    document.getElementById('clientPhone').value = '';
-    document.getElementById('clientAddress').value = '';
-    document.getElementById('notes').value = '';
-    document.getElementById('discount').value = '0';
-    document.getElementById('tva').value = CONFIG.defaultTVA;
-    
-    state.services = [];
-    state.currentInvoiceId = null;
-    addService('', '', 1);
-    
-    updatePreview();
-    showToast('Nouvelle facture créée', 'success');
-}
-
-async function generateInvoiceNumber() {
-    try {
-        const response = await apiFetch('/factures/next-number/');
-        if (response && !response.error) {
-            return response.numero;
-        }
-    } catch (e) {}
-    
-    const date = new Date();
-    const year = date.getFullYear();
-    const random = String(Math.floor(Math.random() * 999)).padStart(3, '0');
-    return `FAC-${year}-${random}`;
-}
-
-async function generatePDF() {
-    if (!state.currentInvoiceId) {
-        const saved = await saveInvoice();
-        if (!saved) return;
-    }
-    
-    showToast('Génération du PDF...', 'info');
-    
-    try {
-        const response = await fetch(`${CONFIG.apiUrl}/factures/${state.currentInvoiceId}/pdf/`, {
-            headers: authHeaders()
-        });
-        
-        if (!response.ok) throw new Error('Erreur génération PDF');
-        
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Facture_${state.currentInvoiceId}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        a.remove();
-        
-        showToast('PDF téléchargé!', 'success');
-    } catch (e) {
-        showToast('Utilisation de l\'impression PDF...', 'info');
-        setTimeout(() => printInvoice(), 500);
+    // Préremplir le service avec la dernière mensualité
+    const latest = paiements.sort((a, b) => new Date(b.date_paiement) - new Date(a.date_paiement))[0];
+    if (latest.montant_du && state.services.length > 0) {
+        state.services[0].price = parseFloat(latest.montant_du);
+        state.services[0].description = latest.periode || 'Mensualité';
+        renderServicesList();
+        updatePreview();
     }
 }
 
-function printInvoice() {
-    if (!state.currentInvoiceId) {
-        showToast('Veuillez d\'abord sauvegarder la facture', 'warning');
-        return;
-    }
-    window.print();
-}
-
-// ============================================
-// HISTORY MANAGEMENT
-// ============================================
-function loadSampleHistory() {
-    state.invoiceHistory = [
-        { id: 'FAC-2026-042', client: 'Sarah Moussaoui', date: '2026-04-15', amount: 22000, status: 'payée' },
-        { id: 'FAC-2026-041', client: 'Karim Hadj', date: '2026-04-14', amount: 8000, status: 'en attente' },
-        { id: 'FAC-2026-040', client: 'Yasmine Kadiri', date: '2026-04-12', amount: 15000, status: 'payée' },
-        { id: 'FAC-2026-039', client: 'Mohamed Lamine', date: '2026-04-10', amount: 12000, status: 'en retard' }
-    ];
-    renderHistory();
-}
-
-function renderHistory() {
-    const grid = document.getElementById('historyGrid');
-    
-    if (state.invoiceHistory.length === 0) {
-        grid.innerHTML = '<p style="color: #94a3b8; text-align: center; padding: 2rem;">Aucune facture récente</p>';
-        return;
-    }
-    
-    grid.innerHTML = state.invoiceHistory.map(h => `
-        <div class="history-card" onclick="loadExistingInvoice('${h.id}')">
-            <div class="history-header">
-                <span class="history-id">${escapeHtml(h.numero_facture || h.id)}</span>
-                <span class="history-status status-${(h.statut || h.status || 'en-attente').replace(/\s+/g, '-')}">${h.statut || h.status || 'en attente'}</span>
-            </div>
-            <div class="history-client">${escapeHtml(h.client_nom || h.client || 'Client')}</div>
-            <div class="history-date">${formatDate(h.date_emission || h.date)}</div>
-            <div class="history-amount">${formatMoney(h.total_ttc || h.amount || 0)} ${CONFIG.currency}</div>
-        </div>
-    `).join('');
-}
-
-async function loadExistingInvoice(id) {
-    showToast('Chargement de la facture...', 'info');
-    
-    const data = await apiFetch(`/factures/${id}/`);
-    if (data?.error) {
-        showToast('Erreur: ' + data.message, 'error');
-        return;
-    }
-    
-    state.currentInvoiceId = data.id;
-    document.getElementById('invoiceNum').value = data.numero_facture || '';
-    document.getElementById('invoiceDate').value = data.date_emission || '';
-    document.getElementById('dueDate').value = data.date_echeance || '';
-    document.getElementById('invoiceStatus').value = data.statut || 'en attente';
-    document.getElementById('clientName').value = data.client_nom || '';
-    document.getElementById('clientEmail').value = data.client_email || '';
-    document.getElementById('clientPhone').value = data.client_telephone || '';
-    document.getElementById('clientAddress').value = data.client_adresse || '';
-    document.getElementById('discount').value = data.remise_pourcentage || 0;
-    document.getElementById('tva').value = data.tva_pourcentage || CONFIG.defaultTVA;
-    document.getElementById('notes').value = data.notes || '';
-    
-    if (data.services && data.services.length > 0) {
-        state.services = data.services.map((s, index) => ({
-            id: Date.now() + index,
-            description: s.description,
-            price: s.prix_unitaire,
-            qty: s.quantite
-        }));
-    } else {
-        state.services = [];
-        addService('', '', 1);
-    }
-    
-    if (data.template) {
-        changeTemplate(data.template);
-    }
-    
-    renderServices();
-    updatePreview();
-    showToast('Facture chargée', 'success');
-    
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// ============================================
-// UTILITIES
-// ============================================
-function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
-    return date.toLocaleDateString('fr-FR', { 
-        day: 'numeric', 
-        month: 'long', 
-        year: 'numeric' 
-    });
-}
-
-function formatMoney(amount) {
-    return new Intl.NumberFormat('fr-DZ').format(Math.round(amount));
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// ============================================
-// TOAST NOTIFICATIONS (Matching dash_secr.js)
-// ============================================
-function showToast(message, type = 'info') {
-    const existing = document.querySelector('.toast-secr');
-    if (existing) existing.remove();
-    
-    const colors = { 
-        success: '#059669', 
-        error: '#dc2626', 
-        warning: '#d97706', 
-        info: '#0284c7' 
-    };
-    const icons = { 
-        success: '✓', 
-        error: '✕', 
-        warning: '⚠', 
-        info: 'ℹ' 
-    };
-    
-    const toast = document.createElement('div');
-    toast.className = 'toast-secr';
-    toast.style.cssText = `
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 9999;
-        padding: 14px 22px;
-        border-radius: 12px;
-        background: ${colors[type]};
-        color: white;
-        font-weight: 500;
-        font-size: 0.9rem;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        transform: translateX(120%);
-        opacity: 0;
-        transition: all 0.3s ease;
+// ============================================================
+// INJECT STYLES ANIMATION
+// ============================================================
+function injectStyles() {
+    if (document.getElementById('fac-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'fac-styles';
+    s.textContent = `
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .animate-in { animation: fadeIn .5s ease forwards; }
     `;
-    toast.innerHTML = `<span>${icons[type]}</span>${escapeHtml(message)}`;
-    document.body.appendChild(toast);
-    
-    requestAnimationFrame(() => {
-        toast.style.transform = 'translateX(0)';
-        toast.style.opacity = '1';
-    });
-    
-    setTimeout(() => {
-        toast.style.transform = 'translateX(120%)';
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3500);
+    document.head.appendChild(s);
 }
 
-// ============================================
-// AUTO-REFRESH
-// ============================================
-setInterval(() => {
-    if (!document.hidden && state.invoiceHistory.length > 0) {
-        loadRecentInvoices();
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+    injectStyles();
+
+    // Mettre à jour le preview à chaque changement de champs simples
+    ['invoiceNum','invoiceDate','dueDate','invoiceStatus',
+     'clientName','clientEmail','clientPhone','clientAddress',
+     'discount','tva','notes'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updatePreview);
+        if (el) el.addEventListener('change', updatePreview);
+    });
+
+    // Charger le compteur depuis l'historique
+    const history = JSON.parse(localStorage.getItem('factures_history') || '[]');
+    if (history.length) {
+        const lastNum = history[0]?.num || '';
+        const match   = lastNum.match(/(\d+)$/);
+        if (match) state.invoiceCounter = parseInt(match[1]) + 1;
     }
-}, 120000);
+
+    initDefaults();
+});

@@ -21,6 +21,7 @@ urlpatterns = [
 
     # Home
     path('', home, name='home'),
+   
 
     # ============================================================
     # AUTH
@@ -138,7 +139,8 @@ urlpatterns = [
     # ============================================================
     # UTILISATEUR DETAIL (admin field updates)
     # ============================================================
-    #path('utilisateurs/<int:pk>/', views.UtilisateurDetailView.as_view(), name='user_detail'),
+    path('utilisateurs/<int:pk>/', views.UtilisateurDetailView.as_view()),
+   
 ]
 
 # ✅ Add static/media ONLY in debug

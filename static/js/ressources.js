@@ -1,52 +1,53 @@
-// ressources.js - Educational Resources Management System with JWT Authentication
+/**
+ * Ressources - Espace Enseignant
+ * JWT Authentication + Django REST API
+ * FIXED: asks for langue, niveau, groupe before upload
+ */
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Helper to get token from both storage types
-    function getAuthToken() {
-        return localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || null;
-    }
+document.addEventListener('DOMContentLoaded', function () {
 
-    // State management
+    // ============================================================
+    // STATE
+    // ============================================================
     const state = {
-        resources: [],
+        resources:     [],
+        groupes:       [],       // loaded from /api/groupes/
         currentFilter: 'all',
-        searchQuery: '',
-        isUploading: false,
-        selectedFiles: [],
-        apiBaseUrl: '/api',
-        authToken: getAuthToken()
+        searchQuery:   '',
+        authToken:     localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || null,
+        apiBaseUrl:    '/api',
     };
 
-    // DOM Elements
+    // ============================================================
+    // DOM
+    // ============================================================
     const elements = {
-        uploadArea: document.querySelector('.upload-area'),
-        uploadBtn: document.querySelector('.upload-btn'),
-        searchInput: document.querySelector('.search-box input'),
-        filterTabs: document.querySelectorAll('.tab-btn'),
+        uploadArea:    document.querySelector('.upload-area'),
+        uploadBtn:     document.querySelector('.upload-btn'),
+        searchInput:   document.querySelector('.search-box input'),
+        filterTabs:    document.querySelectorAll('.tab-btn'),
         resourcesGrid: document.querySelector('.resources-grid'),
-        fileInput: null
+        fileInput:     null,
     };
 
-    // Initialize
-    init();
-
-    function init() {
-        // Check if user is authenticated
-        if (!state.authToken) {
-            showNotification('❌ Veuillez vous connecter d\'abord', 'error');
-            setTimeout(() => {
-                window.location.href = '/login/';
-            }, 2000);
-            return;
-        }
-
-        createFileInput();
-        setupEventListeners();
-        setupDragAndDrop();
-        loadResourcesFromDatabase();
+    // ============================================================
+    // INIT
+    // ============================================================
+    if (!state.authToken) {
+        showNotification('Veuillez vous connecter.', 'error');
+        setTimeout(() => { window.location.href = '/login/'; }, 1500);
+        return;
     }
 
-    // Create hidden file input
+    createFileInput();
+    setupEventListeners();
+    setupDragAndDrop();
+    loadGroupes();          // load groupes first
+    loadResources();
+
+    // ============================================================
+    // FILE INPUT
+    // ============================================================
     function createFileInput() {
         elements.fileInput = document.createElement('input');
         elements.fileInput.type = 'file';
@@ -54,325 +55,341 @@ document.addEventListener('DOMContentLoaded', function() {
         elements.fileInput.accept = '.pdf,.mp4,.mp3,.doc,.docx,.ppt,.pptx';
         elements.fileInput.style.display = 'none';
         document.body.appendChild(elements.fileInput);
+        elements.fileInput.addEventListener('change', (e) => handleFilesSelected(e.target.files));
     }
 
-    // Load resources from database
-    async function loadResourcesFromDatabase() {
+    // ============================================================
+    // LOAD GROUPES (for the modal select)
+    // GroupeSerializer fields: id, nom_groupe, langue, niveau
+    // ============================================================
+    async function loadGroupes() {
         try {
-            const response = await fetch(`${state.apiBaseUrl}/ressources/`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${state.authToken}`,
-                    'Content-Type': 'application/json'
-                }
+            const res = await fetch(`${state.apiBaseUrl}/groupes/`, {
+                headers: { 'Authorization': `Bearer ${state.authToken}` }
             });
+            if (!res.ok) return;
+            const data = await res.json();
+            state.groupes = Array.isArray(data) ? data : [];
+        } catch (e) {
+            state.groupes = [];
+        }
+    }
 
-            if (!response.ok) {
-                if (response.status === 401) {
-                    localStorage.removeItem('access_token');
-                    sessionStorage.removeItem('access_token');
-                    window.location.href = '/login/';
-                    return;
-                }
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const data = await response.json();
+    // ============================================================
+    // LOAD RESOURCES
+    // ============================================================
+    async function loadResources() {
+        showGridSkeleton();
+        try {
+            const res = await fetch(`${state.apiBaseUrl}/ressources/`, {
+                headers: { 'Authorization': `Bearer ${state.authToken}` }
+            });
+            if (res.status === 401) { redirectLogin(); return; }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
             state.resources = Array.isArray(data) ? data : (data.results || []);
             renderResources(state.resources);
-            updateStatsFromData(state.resources);
-        } catch (error) {
-            console.error('Error loading resources:', error);
-            showNotification('❌ Erreur lors du chargement des ressources', 'error');
+            updateStats(state.resources);
+        } catch (e) {
+            showNotification('Erreur chargement ressources.', 'error');
+            showNoResults();
         }
     }
 
-    // Render resources to grid
-    function renderResources(resources) {
+    // ============================================================
+    // RENDER RESOURCES
+    // ============================================================
+    function renderResources(list) {
         elements.resourcesGrid.innerHTML = '';
-
-        if (resources.length === 0) {
-            showNoResults();
-            return;
-        }
-
-        resources.forEach(resource => {
-            const card = createResourceCardFromDB(resource);
+        if (!list.length) { showNoResults(); return; }
+        list.forEach(r => {
+            const card = buildCard(r);
             elements.resourcesGrid.appendChild(card);
-            setupCardActions(card, resource.id);
+            setupCardActions(card, r.id);
         });
     }
 
-    // Create resource card from database data
-    function createResourceCardFromDB(resource) {
+    function buildCard(resource) {
         const card = document.createElement('div');
         card.className = 'resource-card';
-        card.dataset.type = mapTypeToClass(resource.type_ressource);
+        card.dataset.type  = mapTypeClass(resource.type_ressource);
         card.dataset.title = (resource.titre || '').toLowerCase();
-        card.dataset.id = resource.id;
+        card.dataset.id    = resource.id;
 
-        const typeConfig = getTypeConfig(resource.type_ressource);
-        const dateStr = new Date(resource.date_creation || resource.date_disponibilite || Date.now()).toLocaleDateString('fr-FR', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric'
-        });
+        const cfg   = typeConfig(resource.type_ressource);
+        const date  = new Date(resource.date_creation || Date.now())
+            .toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+
+        // RessourceSerializer flat fields:
+        // titre, description, type_ressource, niveau, groupe_nom (get_groupe_nom),
+        // enseignant_nom (get_enseignant_nom), nombre_telechargements, visible_etudiants
+        const groupe = resource.groupe_nom || '—';
+        const niveau = resource.niveau     || '—';
 
         card.innerHTML = `
-            <div class="resource-preview ${typeConfig.class}">
-                <span class="file-icon">${typeConfig.icon}</span>
+            <div class="resource-preview ${cfg.cssClass}">
+                <span class="file-icon">${cfg.icon}</span>
                 <span class="file-type-badge">${resource.type_ressource || 'PDF'}</span>
             </div>
             <div class="resource-content">
                 <div class="resource-meta">
-                    <span>📅 ${dateStr}</span>
-                    <span>💾 ${formatFileSize(resource.taille_fichier)}</span>
+                    <span>📅 ${date}</span>
+                    <span>💾 ${formatSize(resource.taille_fichier)}</span>
                 </div>
-                <h3 class="resource-title">${escapeHtml(resource.titre || 'Sans titre')}</h3>
-                <p class="resource-desc">${escapeHtml(resource.description || 'Aucune description')}</p>
+                <h3 class="resource-title">${esc(resource.titre || 'Sans titre')}</h3>
+                <p class="resource-desc">${esc(resource.description || 'Aucune description')}</p>
                 <div class="resource-tags">
-                    <span class="tag anglais">Anglais</span>
-                    ${resource.niveau ? `<span class="tag a2">${resource.niveau}</span>` : ''}
-                    <span class="tag grammaire">${resource.type_ressource || 'Document'}</span>
+                    ${niveau !== '—' ? `<span class="tag niveau-tag">${niveau}</span>` : ''}
+                    ${groupe !== '—' ? `<span class="tag groupe-tag">📚 ${groupe}</span>` : ''}
+                    <span class="tag type-tag">${resource.type_ressource || 'Document'}</span>
+                    ${resource.visible_etudiants
+                        ? '<span class="tag visible-tag">👁 Visible étudiants</span>'
+                        : '<span class="tag hidden-tag">🔒 Masqué</span>'}
                 </div>
                 <div class="resource-footer">
                     <span class="download-count">⬇️ ${resource.nombre_telechargements || 0} téléchargements</span>
                     <div class="resource-actions">
                         <button class="btn-icon download-btn" data-id="${resource.id}" title="Télécharger">⬇️</button>
-                        <button class="btn-icon edit-btn" data-id="${resource.id}" title="Modifier">✏️</button>
-                        <button class="btn-icon delete-btn" data-id="${resource.id}" title="Supprimer">🗑️</button>
+                        <button class="btn-icon edit-btn"     data-id="${resource.id}" title="Modifier">✏️</button>
+                        <button class="btn-icon delete-btn"   data-id="${resource.id}" title="Supprimer">🗑️</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    // ============================================================
+    // DRAG & DROP / FILE SELECT → show metadata modal first
+    // ============================================================
+    function setupDragAndDrop() {
+        const area = elements.uploadArea;
+        ['dragenter','dragover','dragleave','drop'].forEach(ev => {
+            area.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); });
+        });
+        ['dragenter','dragover'].forEach(ev =>
+            area.addEventListener(ev, () => area.classList.add('drag-active'))
+        );
+        ['dragleave','drop'].forEach(ev =>
+            area.addEventListener(ev, () => area.classList.remove('drag-active'))
+        );
+        area.addEventListener('drop', e => handleFilesSelected(e.dataTransfer.files));
+        area.addEventListener('click', e => {
+            if (!e.target.closest('.file-type')) elements.fileInput.click();
+        });
+    }
+
+    // Called when files are chosen (drag or click)
+    function handleFilesSelected(fileList) {
+        const files = Array.from(fileList);
+        if (!files.length) return;
+        // Show the metadata modal BEFORE uploading
+        openUploadModal(files);
+    }
+
+    // ============================================================
+    // UPLOAD METADATA MODAL
+    // Collects: titre (auto), langue, niveau, groupe, visible_etudiants
+    // ============================================================
+    function openUploadModal(files) {
+        // Build groupe options from loaded groupes
+        const groupeOptions = state.groupes.map(g =>
+            `<option value="${g.id}">${g.nom_groupe} — ${g.langue} ${g.niveau}</option>`
+        ).join('');
+
+        const modal = document.createElement('div');
+        modal.id = 'upload-modal';
+        modal.innerHTML = `
+            <div class="modal-overlay" id="upload-overlay">
+                <div class="modal-content" style="max-width:520px;">
+                    <h2 style="margin-bottom:1.5rem;">📤 Informations de la ressource</h2>
+                    <p style="color:#64748b;margin-bottom:1.5rem;font-size:.9rem;">
+                        ${files.length} fichier(s) sélectionné(s) :
+                        <strong>${files.map(f => f.name).join(', ')}</strong>
+                    </p>
+
+                    <div class="form-group">
+                        <label>Langue <span style="color:#ef4444">*</span></label>
+                        <select id="modal-langue" required>
+                            <option value="">-- Sélectionner la langue --</option>
+                            <option value="Anglais">Anglais</option>
+                            <option value="Français">Français</option>
+                            <option value="Arabe">Arabe</option>
+                            <option value="Espagnol">Espagnol</option>
+                            <option value="Allemand">Allemand</option>
+                            <option value="Italien">Italien</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Niveau <span style="color:#ef4444">*</span></label>
+                        <select id="modal-niveau" required>
+                            <option value="">-- Sélectionner le niveau --</option>
+                            <option value="A1">A1 — Débutant</option>
+                            <option value="A2">A2 — Élémentaire</option>
+                            <option value="B1">B1 — Intermédiaire</option>
+                            <option value="B2">B2 — Intermédiaire supérieur</option>
+                            <option value="C1">C1 — Avancé</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Groupe (optionnel)</label>
+                        <select id="modal-groupe">
+                            <option value="">-- Toutes les classes --</option>
+                            ${groupeOptions}
+                        </select>
+                        <small style="color:#94a3b8;">
+                            Si vous choisissez un groupe, seuls ses étudiants verront la ressource.
+                            Sinon, tous les étudiants du niveau choisi la verront.
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Description (optionnel)</label>
+                        <textarea id="modal-desc" placeholder="Décrivez le contenu de cette ressource..."
+                            style="min-height:80px;resize:vertical;"></textarea>
+                    </div>
+
+                    <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+                        <input type="checkbox" id="modal-visible" checked style="width:18px;height:18px;">
+                        <label for="modal-visible" style="margin:0;cursor:pointer;">
+                            Visible par les étudiants immédiatement
+                        </label>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn-secondary" id="modal-cancel">Annuler</button>
+                        <button class="btn-primary"   id="modal-confirm">Uploader</button>
                     </div>
                 </div>
             </div>
         `;
 
-        return card;
-    }
+        document.body.appendChild(modal);
+        injectModalStyles();
 
-    // Map database type to CSS class
-    function mapTypeToClass(type) {
-        const mapping = {
-            'PDF': 'pdf',
-            'Video': 'video',
-            'Audio': 'audio',
-            'PPT': 'ppt',
-            'Exercice': 'doc',
-            'Lien': 'doc'
-        };
-        return mapping[type] || 'pdf';
-    }
-
-    // Get type configuration
-    function getTypeConfig(type) {
-        const configs = {
-            'PDF': { icon: '📄', class: 'pdf' },
-            'Video': { icon: '🎥', class: 'video' },
-            'Audio': { icon: '🎵', class: 'audio' },
-            'PPT': { icon: '📊', class: 'ppt' },
-            'Exercice': { icon: '📝', class: 'doc' },
-            'Lien': { icon: '🔗', class: 'doc' }
-        };
-        return configs[type] || { icon: '📄', class: 'pdf' };
-    }
-
-    // Format file size
-    function formatFileSize(bytes) {
-        if (!bytes || bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-    }
-
-    // Escape HTML to prevent XSS
-    function escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    // Event Listeners Setup
-    function setupEventListeners() {
-        elements.uploadBtn.addEventListener('click', () => {
-            scrollToUpload();
-            highlightUploadArea();
+        document.getElementById('modal-cancel').addEventListener('click', () => {
+            modal.remove();
+            elements.fileInput.value = '';
         });
 
-        elements.uploadArea.addEventListener('click', (e) => {
-            if (e.target.closest('.file-type')) return;
-            elements.fileInput.click();
+        document.getElementById('upload-overlay').addEventListener('click', e => {
+            if (e.target.id === 'upload-overlay') { modal.remove(); elements.fileInput.value = ''; }
         });
 
-        elements.fileInput.addEventListener('change', handleFileSelect);
+        document.getElementById('modal-confirm').addEventListener('click', async () => {
+            const langue  = document.getElementById('modal-langue').value;
+            const niveau  = document.getElementById('modal-niveau').value;
+            const groupe  = document.getElementById('modal-groupe').value || null;
+            const desc    = document.getElementById('modal-desc').value.trim();
+            const visible = document.getElementById('modal-visible').checked;
 
-        elements.searchInput.addEventListener('input', debounce((e) => {
-            state.searchQuery = e.target.value.toLowerCase();
-            filterResources();
-        }, 300));
+            if (!langue) { highlightRequired('modal-langue'); return; }
+            if (!niveau) { highlightRequired('modal-niveau'); return; }
 
-        elements.filterTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                setActiveTab(tab);
-                state.currentFilter = tab.textContent.toLowerCase();
-                filterResources();
-            });
+            modal.remove();
+            await uploadFiles(files, { langue, niveau, groupe, desc, visible });
         });
     }
 
-    // Drag and Drop Setup
-    function setupDragAndDrop() {
-        const uploadArea = elements.uploadArea;
-        const events = ['dragenter', 'dragover', 'dragleave', 'drop'];
-
-        events.forEach(eventName => {
-            uploadArea.addEventListener(eventName, preventDefaults, false);
-            document.body.addEventListener(eventName, preventDefaults, false);
-        });
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            uploadArea.addEventListener(eventName, () => highlightDropZone(uploadArea), false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            uploadArea.addEventListener(eventName, () => unhighlightDropZone(uploadArea), false);
-        });
-
-        uploadArea.addEventListener('drop', handleDrop, false);
+    function highlightRequired(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.borderColor = '#ef4444';
+        el.focus();
+        setTimeout(() => { el.style.borderColor = ''; }, 2000);
+        showNotification('Veuillez remplir les champs obligatoires.', 'error');
     }
 
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
+    // ============================================================
+    // UPLOAD FILES  (uses metadata from modal)
+    // RessourceCreateSerializer fields:
+    //   titre, description, type_ressource, fichier,
+    //   niveau, groupe (FK int), visible_etudiants
+    // Note: langue is NOT a field on Ressource model —
+    //   we append it to the description so it's visible on the card.
+    // ============================================================
+    async function uploadFiles(files, meta) {
+        showUploadProgress(files);
 
-    function highlightDropZone(element) {
-        element.classList.add('drag-active');
-        element.style.borderColor = '#667eea';
-        element.style.background = '#f8fafc';
-        element.style.transform = 'scale(1.02)';
-    }
-
-    function unhighlightDropZone(element) {
-        element.classList.remove('drag-active');
-        element.style.borderColor = '#cbd5e1';
-        element.style.background = 'white';
-        element.style.transform = 'scale(1)';
-    }
-
-    function handleDrop(e) {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        handleFiles(files);
-    }
-
-    function handleFileSelect(e) {
-        const files = e.target.files;
-        handleFiles(files);
-    }
-
-    // File Processing with Database Upload
-    async function handleFiles(files) {
-        if (files.length === 0) return;
-
-        state.selectedFiles = Array.from(files);
-        showUploadProgress();
-
-        for (let i = 0; i < state.selectedFiles.length; i++) {
-            const file = state.selectedFiles[i];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             try {
-                await uploadFileToDatabase(file, i);
-            } catch (error) {
-                console.error('Upload error:', error);
-                showNotification(`❌ ${file.name}: ${error.message}`, 'error');
+                await uploadSingleFile(file, i, meta);
+            } catch (e) {
+                showNotification(`Erreur: ${file.name} — ${e.message}`, 'error');
+                updateFileProgress(i, 0, 'error');
             }
         }
 
-        finishUpload();
+        setTimeout(() => {
+            resetUploadArea();
+            loadResources();  // reload grid to show new cards
+        }, 1200);
     }
 
-    // Upload single file to database
-    async function uploadFileToDatabase(file, index) {
-        const formData = new FormData();
-
-        const extension = file.name.split('.').pop().toLowerCase();
-        const typeMapping = {
-            'pdf': 'PDF', 'mp4': 'Video', 'mp3': 'Audio',
-            'doc': 'Exercice', 'docx': 'Exercice',
-            'ppt': 'PPT', 'pptx': 'PPT'
+    async function uploadSingleFile(file, index, meta) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const typeMap = {
+            pdf: 'PDF', mp4: 'Video', mp3: 'Audio',
+            doc: 'Exercice', docx: 'Exercice',
+            ppt: 'PPT', pptx: 'PPT',
         };
 
-        formData.append('fichier', file);
-        formData.append('titre', file.name.replace(/\.[^/.]+$/, ""));
-        formData.append('description', `Fichier uploadé le ${new Date().toLocaleDateString('fr-FR')}`);
-        formData.append('type_ressource', typeMapping[extension] || 'PDF');
-        formData.append('visible_etudiants', 'true');
+        const formData = new FormData();
+        formData.append('fichier',            file);
+        formData.append('titre',              file.name.replace(/\.[^/.]+$/, ''));
+        formData.append('type_ressource',     typeMap[ext] || 'PDF');
+        formData.append('niveau',             meta.niveau);
+        formData.append('visible_etudiants',  meta.visible ? 'true' : 'false');
+        // Prepend langue to description so it appears on the card
+        const descFull = `[${meta.langue} — ${meta.niveau}]${meta.desc ? ' ' + meta.desc : ''}`;
+        formData.append('description', descFull);
+        if (meta.groupe) formData.append('groupe', meta.groupe);
 
-        updateFileProgress(index, 30);
+        updateFileProgress(index, 40);
 
-        try {
-            const response = await fetch(`${state.apiBaseUrl}/ressources/`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${state.authToken}`
-                    // Don't set Content-Type - browser sets it with boundary for FormData
-                },
-                body: formData
-            });
+        const res = await fetch(`${state.apiBaseUrl}/ressources/`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${state.authToken}` },
+            body: formData,
+        });
 
-            // DEBUG: Check if response is JSON
-            const contentType = response.headers.get('content-type');
-            console.log('Response status:', response.status);
-            console.log('Content-Type:', contentType);
+        if (res.status === 401) { redirectLogin(); return; }
 
-            if (!contentType || !contentType.includes('application/json')) {
-                const text = await response.text();
-                console.error('Server returned HTML:', text.substring(0, 500));
-
-                if (response.status === 500) {
-                    throw new Error('Erreur serveur (500). Vérifiez la console Django.');
-                } else if (response.status === 404) {
-                    throw new Error('API non trouvée (404).');
-                } else if (response.status === 403) {
-                    throw new Error('Accès refusé (403).');
-                } else {
-                    throw new Error(`Erreur ${response.status}: ${text.substring(0, 100)}`);
-                }
-            }
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.detail || data.error || JSON.stringify(data));
-            }
-
-            updateFileProgress(index, 100);
-            addResourceCardToGrid(data);
-            updateStatsFromType(data.type_ressource);
-            showNotification(`✅ ${file.name} uploadé avec succès`, 'success');
-
-            return data;
-
-        } catch (error) {
-            updateFileProgress(index, 0);
-            throw error;
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            const txt = await res.text();
+            throw new Error(`Serveur: ${res.status} — ${txt.slice(0, 120)}`);
         }
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.error || JSON.stringify(data));
+
+        updateFileProgress(index, 100, 'done');
+        showNotification(`✅ ${file.name} uploadé`, 'success');
+        return data;
     }
 
-    // Show upload progress UI
-    function showUploadProgress() {
-        const uploadArea = elements.uploadArea;
-        uploadArea.innerHTML = `
-            <div class="upload-progress-container">
+    // ============================================================
+    // PROGRESS UI
+    // ============================================================
+    function showUploadProgress(files) {
+        elements.uploadArea.innerHTML = `
+            <div class="upload-progress-container" style="padding:2rem;text-align:center;">
                 <div class="upload-spinner"></div>
-                <h3>Téléchargement en cours...</h3>
-                <p>${state.selectedFiles.length} fichier(s) en cours d'upload</p>
-                <div class="progress-list">
-                    ${state.selectedFiles.map((f, i) => `
-                        <div class="progress-item" data-index="${i}">
-                            <span class="file-name">${f.name}</span>
-                            <div class="progress-bar-container">
-                                <div class="progress-bar" style="width: 0%"></div>
+                <h3 style="margin:.75rem 0 .25rem;">Upload en cours...</h3>
+                <p style="color:#64748b;font-size:.9rem;">${files.length} fichier(s)</p>
+                <div class="progress-list" style="margin-top:1.25rem;max-width:380px;margin-left:auto;margin-right:auto;">
+                    ${files.map((f, i) => `
+                        <div class="progress-item" data-index="${i}" style="margin-bottom:.75rem;text-align:left;">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:.3rem;">
+                                <span style="font-size:.85rem;color:#475569;">${esc(f.name)}</span>
+                                <span class="prog-pct" style="font-size:.8rem;color:#94a3b8;">0%</span>
+                            </div>
+                            <div style="height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;">
+                                <div class="progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#667eea,#764ba2);border-radius:3px;transition:width .3s;"></div>
                             </div>
                         </div>
                     `).join('')}
@@ -381,18 +398,15 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
 
-    function updateFileProgress(index, percent) {
-        const item = document.querySelector(`.progress-item[data-index="${index}"] .progress-bar`);
-        if (item) {
-            item.style.width = percent + '%';
-            item.style.transition = 'width 0.3s ease';
-        }
-    }
-
-    function finishUpload() {
-        setTimeout(() => {
-            resetUploadArea();
-        }, 1500);
+    function updateFileProgress(index, pct, state = '') {
+        const item = document.querySelector(`.progress-item[data-index="${index}"]`);
+        if (!item) return;
+        const bar  = item.querySelector('.progress-bar');
+        const text = item.querySelector('.prog-pct');
+        if (bar)  bar.style.width = pct + '%';
+        if (text) text.textContent = pct + '%';
+        if (state === 'error' && bar)  bar.style.background = '#ef4444';
+        if (state === 'done'  && bar)  bar.style.background = '#10b981';
     }
 
     function resetUploadArea() {
@@ -411,597 +425,395 @@ document.addEventListener('DOMContentLoaded', function() {
         setupDragAndDrop();
     }
 
-    // Add resource card to grid
-    function addResourceCardToGrid(resource) {
-        const card = createResourceCardFromDB(resource);
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(20px)';
-
-        elements.resourcesGrid.insertBefore(card, elements.resourcesGrid.firstChild);
-
-        requestAnimationFrame(() => {
-            card.style.transition = 'all 0.5s ease';
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-        });
-
-        setupCardActions(card, resource.id);
-    }
-
-    // Setup card actions
+    // ============================================================
+    // CARD ACTIONS
+    // ============================================================
     function setupCardActions(card, resourceId) {
-        const downloadBtn = card.querySelector('.download-btn');
-        const editBtn = card.querySelector('.edit-btn');
-        const deleteBtn = card.querySelector('.delete-btn');
-
-        if (downloadBtn) {
-            downloadBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                downloadResource(resourceId, downloadBtn);
-            });
-        }
-
-        if (editBtn) {
-            editBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openEditModal(resourceId, card);
-            });
-        }
-
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                confirmDelete(resourceId, card);
-            });
-        }
-    }
-
-    // Download resource
-async function downloadResource(resourceId, button) {
-    try {
-        // Visual feedback
-        button.style.transform = 'scale(1.2)';
-        setTimeout(() => button.style.transform = 'scale(1)', 200);
-
-        // Method 1: Try fetch with JWT token (more secure)
-        const response = await fetch(`${state.apiBaseUrl}/ressources/${resourceId}/download/`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${state.authToken}`
-            }
+        card.querySelector('.download-btn')?.addEventListener('click', e => {
+            e.stopPropagation();
+            downloadResource(resourceId, e.currentTarget);
         });
+        card.querySelector('.edit-btn')?.addEventListener('click', e => {
+            e.stopPropagation();
+            openEditModal(resourceId, card);
+        });
+        card.querySelector('.delete-btn')?.addEventListener('click', e => {
+            e.stopPropagation();
+            deleteResource(resourceId, card);
+        });
+    }
 
-        if (!response.ok) {
-            if (response.status === 401) {
-                // Token expired
-                localStorage.removeItem('access_token');
-                sessionStorage.removeItem('access_token');
-                window.location.href = '/login/';
-                return;
-            }
-            throw new Error(`Download failed: ${response.status}`);
-        }
+    // ============================================================
+    // DOWNLOAD
+    // ============================================================
+    async function downloadResource(id, btn) {
+        btn.style.transform = 'scale(1.2)';
+        setTimeout(() => btn.style.transform = 'scale(1)', 200);
 
-        // Get filename from Content-Disposition header
-        const disposition = response.headers.get('Content-Disposition');
-        let filename = 'download';
-        if (disposition && disposition.includes('filename=')) {
-            const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-            if (match) {
-                filename = match[1].replace(/['"]/g, '');
-            }
-        }
-
-        // Create blob and download
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-
-        // Cleanup
-        setTimeout(() => {
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        }, 100);
-
-        // Update counter locally
-        const countSpan = button.closest('.resource-footer').querySelector('.download-count');
-        const match = countSpan.textContent.match(/(\d+)/);
-        if (match) {
-            const newCount = parseInt(match[1]) + 1;
-            countSpan.textContent = `⬇️ ${newCount} téléchargements`;
-        }
-
-        showNotification('📥 Téléchargement démarré', 'success');
-
-    } catch (error) {
-        console.error('Download error:', error);
-        showNotification('❌ Erreur de téléchargement: ' + error.message, 'error');
-
-        // Fallback: Try opening in new tab with token
         try {
-            const token = encodeURIComponent(state.authToken);
-            window.open(`${state.apiBaseUrl}/ressources/${resourceId}/download/?token=${token}`, '_blank');
-            showNotification('📥 Tentative de téléchargement dans nouvel onglet', 'info');
+            const res = await fetch(`${state.apiBaseUrl}/ressources/${id}/download/`, {
+                headers: { 'Authorization': `Bearer ${state.authToken}` }
+            });
+            if (res.status === 401) { redirectLogin(); return; }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const disposition = res.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            const filename = match ? match[1].replace(/['"]/g, '') : 'ressource';
+
+            const blob = await res.blob();
+            const url  = window.URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { window.URL.revokeObjectURL(url); a.remove(); }, 100);
+
+            // Update counter locally
+            const counter = btn.closest('.resource-footer')?.querySelector('.download-count');
+            if (counter) {
+                const n = parseInt(counter.textContent.match(/\d+/)?.[0] || 0) + 1;
+                counter.textContent = `⬇️ ${n} téléchargements`;
+            }
+            showNotification('Téléchargement démarré.', 'success');
         } catch (e) {
-            showNotification('❌ Impossible de télécharger le fichier', 'error');
+            showNotification('Erreur téléchargement: ' + e.message, 'error');
         }
     }
-}
 
-    // Delete resource
-    async function confirmDelete(resourceId, card) {
-        if (!confirm('Êtes-vous sûr de vouloir supprimer cette ressource ?')) return;
-
+    // ============================================================
+    // DELETE
+    // ============================================================
+    async function deleteResource(id, card) {
+        if (!confirm('Supprimer cette ressource ?')) return;
         try {
-            const response = await fetch(`${state.apiBaseUrl}/ressources/${resourceId}/`, {
+            const res = await fetch(`${state.apiBaseUrl}/ressources/${id}/`, {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${state.authToken}`,
-                    'Content-Type': 'application/json'
-                }
+                headers: { 'Authorization': `Bearer ${state.authToken}` }
             });
+            if (res.status === 401) { redirectLogin(); return; }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-            if (!response.ok) {
-                if (response.status === 401) {
-                    window.location.href = '/login/';
-                    return;
-                }
-                throw new Error('Delete failed');
-            }
-
-            card.style.transform = 'scale(0.9) rotate(5deg)';
-            card.style.opacity = '0';
-
+            card.style.transition = 'all .3s ease';
+            card.style.transform  = 'scale(0.9)';
+            card.style.opacity    = '0';
             setTimeout(() => {
                 card.remove();
-                state.resources = state.resources.filter(r => r.id !== resourceId);
-                updateStatsFromData(state.resources);
+                state.resources = state.resources.filter(r => r.id !== id);
+                updateStats(state.resources);
             }, 300);
-
-            showNotification('🗑️ Ressource supprimée', 'warning');
-        } catch (error) {
-            showNotification('❌ Erreur lors de la suppression', 'error');
+            showNotification('Ressource supprimée.', 'warning');
+        } catch (e) {
+            showNotification('Erreur suppression.', 'error');
         }
     }
 
-    // Edit resource
-    async function openEditModal(resourceId, card) {
-        const resource = state.resources.find(r => r.id === resourceId);
+    // ============================================================
+    // EDIT MODAL
+    // ============================================================
+    async function openEditModal(id, card) {
+        const resource = state.resources.find(r => r.id === id);
         if (!resource) return;
 
+        const groupeOptions = state.groupes.map(g =>
+            `<option value="${g.id}" ${resource.groupe == g.id ? 'selected' : ''}>
+                ${g.nom_groupe} — ${g.langue} ${g.niveau}
+            </option>`
+        ).join('');
+
         const modal = document.createElement('div');
-        modal.className = 'edit-modal';
         modal.innerHTML = `
-            <div class="modal-overlay">
-                <div class="modal-content">
-                    <h2>Modifier la Ressource</h2>
+            <div class="modal-overlay" id="edit-overlay">
+                <div class="modal-content" style="max-width:500px;">
+                    <h2 style="margin-bottom:1.5rem;">✏️ Modifier la ressource</h2>
                     <div class="form-group">
                         <label>Titre</label>
-                        <input type="text" class="edit-title" value="${escapeHtml(resource.titre || '')}">
-                    </div>
-                    <div class="form-group">
-                        <label>Description</label>
-                        <textarea class="edit-desc">${escapeHtml(resource.description || '')}</textarea>
+                        <input type="text" id="edit-titre" value="${esc(resource.titre || '')}">
                     </div>
                     <div class="form-group">
                         <label>Niveau</label>
-                        <select class="edit-niveau">
+                        <select id="edit-niveau">
                             <option value="">-- Sélectionner --</option>
-                            <option value="A1" ${resource.niveau === 'A1' ? 'selected' : ''}>A1</option>
-                            <option value="A2" ${resource.niveau === 'A2' ? 'selected' : ''}>A2</option>
-                            <option value="B1" ${resource.niveau === 'B1' ? 'selected' : ''}>B1</option>
-                            <option value="B2" ${resource.niveau === 'B2' ? 'selected' : ''}>B2</option>
-                            <option value="C1" ${resource.niveau === 'C1' ? 'selected' : ''}>C1</option>
+                            ${['A1','A2','B1','B2','C1'].map(n =>
+                                `<option value="${n}" ${resource.niveau === n ? 'selected' : ''}>${n}</option>`
+                            ).join('')}
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label>Groupe</label>
+                        <select id="edit-groupe">
+                            <option value="">-- Toutes les classes --</option>
+                            ${groupeOptions}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="edit-desc" style="min-height:80px;">${esc(resource.description || '')}</textarea>
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+                        <input type="checkbox" id="edit-visible" ${resource.visible_etudiants ? 'checked' : ''}
+                            style="width:18px;height:18px;">
+                        <label for="edit-visible" style="margin:0;cursor:pointer;">Visible par les étudiants</label>
+                    </div>
                     <div class="modal-actions">
-                        <button class="btn-secondary cancel-btn">Annuler</button>
-                        <button class="btn-primary save-btn">Sauvegarder</button>
+                        <button class="btn-secondary" id="edit-cancel">Annuler</button>
+                        <button class="btn-primary"   id="edit-save">Sauvegarder</button>
                     </div>
                 </div>
             </div>
         `;
-
         document.body.appendChild(modal);
+        injectModalStyles();
 
-        modal.querySelector('.cancel-btn').addEventListener('click', () => modal.remove());
+        document.getElementById('edit-cancel').addEventListener('click', () => modal.remove());
+        document.getElementById('edit-overlay').addEventListener('click', e => {
+            if (e.target.id === 'edit-overlay') modal.remove();
+        });
 
-        modal.querySelector('.save-btn').addEventListener('click', async () => {
-            const newTitle = modal.querySelector('.edit-title').value;
-            const newDesc = modal.querySelector('.edit-desc').value;
-            const newNiveau = modal.querySelector('.edit-niveau').value;
+        document.getElementById('edit-save').addEventListener('click', async () => {
+            const body = {
+                titre:             document.getElementById('edit-titre').value,
+                niveau:            document.getElementById('edit-niveau').value || null,
+                groupe:            document.getElementById('edit-groupe').value  || null,
+                description:       document.getElementById('edit-desc').value,
+                visible_etudiants: document.getElementById('edit-visible').checked,
+            };
 
             try {
-                const response = await fetch(`${state.apiBaseUrl}/ressources/${resourceId}/`, {
+                const res = await fetch(`${state.apiBaseUrl}/ressources/${id}/`, {
                     method: 'PATCH',
                     headers: {
                         'Authorization': `Bearer ${state.authToken}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        titre: newTitle,
-                        description: newDesc,
-                        niveau: newNiveau
-                    })
+                    body: JSON.stringify(body),
                 });
+                if (res.status === 401) { redirectLogin(); return; }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-                if (!response.ok) {
-                    if (response.status === 401) {
-                        window.location.href = '/login/';
-                        return;
-                    }
-                    throw new Error('Update failed');
-                }
+                const updated = await res.json();
+                const idx = state.resources.findIndex(r => r.id === id);
+                if (idx !== -1) state.resources[idx] = updated;
 
-                const updated = await response.json();
-
-                const index = state.resources.findIndex(r => r.id === resourceId);
-                if (index !== -1) state.resources[index] = updated;
-
-                card.querySelector('.resource-title').textContent = newTitle;
-                card.querySelector('.resource-desc').textContent = newDesc || 'Aucune description';
+                // Rebuild the card in place
+                const newCard = buildCard(updated);
+                card.replaceWith(newCard);
+                setupCardActions(newCard, id);
 
                 modal.remove();
-                showNotification('✅ Modifications sauvegardées', 'success');
-            } catch (error) {
-                showNotification('❌ Erreur lors de la sauvegarde', 'error');
+                showNotification('Modifications sauvegardées.', 'success');
+            } catch (e) {
+                showNotification('Erreur sauvegarde.', 'error');
             }
-        });
-
-        modal.querySelector('.modal-overlay').addEventListener('click', (e) => {
-            if (e.target === modal.querySelector('.modal-overlay')) modal.remove();
         });
     }
 
-    // Filtering
-    function setActiveTab(activeTab) {
+    // ============================================================
+    // FILTERING
+    // ============================================================
+    function setupEventListeners() {
+        elements.uploadBtn?.addEventListener('click', () => {
+            elements.uploadArea.scrollIntoView({ behavior:'smooth', block:'center' });
+        });
+
+        elements.searchInput?.addEventListener('input', debounce(e => {
+            state.searchQuery = e.target.value.toLowerCase();
+            filterCards();
+        }, 300));
+
         elements.filterTabs.forEach(tab => {
-            tab.classList.remove('active');
-            tab.style.background = 'transparent';
-            tab.style.color = '#64748b';
+            tab.addEventListener('click', () => {
+                elements.filterTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                state.currentFilter = tab.dataset.filter || tab.textContent.trim().toLowerCase();
+                filterCards();
+            });
         });
-
-        activeTab.classList.add('active');
-        activeTab.style.background = '#f1f5f9';
-        activeTab.style.color = '#667eea';
     }
 
-    function filterResources() {
+    function filterCards() {
         const cards = document.querySelectorAll('.resource-card');
-        let visibleCount = 0;
-
+        let count = 0;
         cards.forEach(card => {
-            const type = card.dataset.type || '';
-            const title = card.dataset.title || '';
-            const matchesSearch = title.includes(state.searchQuery);
-            const matchesFilter = state.currentFilter === 'tous' ||
-                                  state.currentFilter === 'all' ||
-                                  type.includes(state.currentFilter) ||
-                                  (state.currentFilter === 'documents' && ['pdf', 'doc'].includes(type)) ||
-                                  (state.currentFilter === 'vidéos' && type === 'video') ||
-                                  (state.currentFilter === 'audio' && type === 'audio') ||
-                                  (state.currentFilter === 'exercices' && type === 'doc');
+            const type   = card.dataset.type  || '';
+            const title  = card.dataset.title || '';
+            const matchSearch = title.includes(state.searchQuery);
+            const f = state.currentFilter;
+            const matchFilter =
+                f === 'all' || f === 'tous' ||
+                type === f ||
+                (f === 'documents' && ['pdf','doc'].includes(type)) ||
+                (f === 'vidéos'    && type === 'video') ||
+                (f === 'audio'     && type === 'audio') ||
+                (f === 'exercices' && type === 'doc');
 
-            if (matchesSearch && matchesFilter) {
-                card.style.display = 'block';
-                card.style.animation = 'fadeInUp 0.4s ease';
-                visibleCount++;
-            } else {
-                card.style.display = 'none';
-            }
+            const show = matchSearch && matchFilter;
+            card.style.display = show ? '' : 'none';
+            if (show) count++;
         });
 
-        updateNoResultsMessage(visibleCount);
+        let noRes = elements.resourcesGrid.querySelector('.no-results');
+        if (count === 0) {
+            if (!noRes) {
+                noRes = document.createElement('div');
+                noRes.className = 'no-results';
+                noRes.style.cssText = 'grid-column:1/-1;text-align:center;padding:3rem;color:#94a3b8;';
+                noRes.innerHTML = '<p style="font-size:1.1rem;">🔍 Aucune ressource trouvée</p>';
+                elements.resourcesGrid.appendChild(noRes);
+            }
+        } else {
+            noRes?.remove();
+        }
     }
 
-    function updateNoResultsMessage(count) {
-        let noResults = document.querySelector('.no-results');
+    // ============================================================
+    // STATS
+    // ============================================================
+    function updateStats(resources) {
+        const counts = {
+            pdf:       resources.filter(r => r.type_ressource === 'PDF').length,
+            video:     resources.filter(r => r.type_ressource === 'Video').length,
+            audio:     resources.filter(r => r.type_ressource === 'Audio').length,
+            downloads: resources.reduce((s, r) => s + (r.nombre_telechargements || 0), 0),
+        };
+        const items = document.querySelectorAll('.stat-item h4');
+        if (items[0]) items[0].textContent = counts.pdf;
+        if (items[1]) items[1].textContent = counts.video;
+        if (items[2]) items[2].textContent = counts.audio;
+        if (items[3]) items[3].textContent = counts.downloads;
+    }
 
-        if (count === 0) {
-            if (!noResults) {
-                noResults = document.createElement('div');
-                noResults.className = 'no-results';
-                noResults.innerHTML = `
-                    <div class="no-results-content">
-                        <span class="icon">🔍</span>
-                        <h3>Aucune ressource trouvée</h3>
-                        <p>Essayez de modifier vos critères de recherche</p>
-                    </div>
-                `;
-                elements.resourcesGrid.appendChild(noResults);
-            }
-        } else if (noResults) {
-            noResults.remove();
-        }
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    function mapTypeClass(type) {
+        return { PDF:'pdf', Video:'video', Audio:'audio', PPT:'ppt', Exercice:'doc', Lien:'doc' }[type] || 'pdf';
+    }
+
+    function typeConfig(type) {
+        return ({
+            PDF:      { icon:'📄', cssClass:'pdf' },
+            Video:    { icon:'🎥', cssClass:'video' },
+            Audio:    { icon:'🎵', cssClass:'audio' },
+            PPT:      { icon:'📊', cssClass:'ppt' },
+            Exercice: { icon:'📝', cssClass:'doc' },
+            Lien:     { icon:'🔗', cssClass:'doc' },
+        }[type]) || { icon:'📄', cssClass:'pdf' };
+    }
+
+    function formatSize(mb) {
+        if (!mb) return '—';
+        if (mb < 1) return `${Math.round(mb * 1024)} KB`;
+        return `${mb.toFixed(1)} MB`;
+    }
+
+    function esc(text) {
+        if (!text) return '';
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
+    }
+
+    function showGridSkeleton() {
+        elements.resourcesGrid.innerHTML = Array(4).fill(0).map(() => `
+            <div style="background:#f1f5f9;border-radius:12px;height:220px;
+                animation:shimmer 1.5s infinite;background-size:200% 100%;
+                background-image:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);">
+            </div>`).join('');
     }
 
     function showNoResults() {
         elements.resourcesGrid.innerHTML = `
-            <div class="no-results" style="grid-column: 1 / -1; text-align: center; padding: 4rem;">
-                <div class="no-results-content">
-                    <span class="icon" style="font-size: 4rem;">📚</span>
-                    <h3>Aucune ressource disponible</h3>
-                    <p>Commencez par uploader votre première ressource</p>
-                </div>
-            </div>
-        `;
+            <div style="grid-column:1/-1;text-align:center;padding:4rem;color:#94a3b8;">
+                <div style="font-size:3rem;margin-bottom:1rem;">📚</div>
+                <h3>Aucune ressource disponible</h3>
+                <p>Commencez par uploader votre première ressource</p>
+            </div>`;
     }
 
-    // Update stats
-    function updateStatsFromData(resources) {
-        const stats = {
-            pdf: resources.filter(r => r.type_ressource === 'PDF').length,
-            video: resources.filter(r => r.type_ressource === 'Video').length,
-            audio: resources.filter(r => r.type_ressource === 'Audio').length,
-            downloads: resources.reduce((sum, r) => sum + (r.nombre_telechargements || 0), 0)
-        };
-
-        const statItems = document.querySelectorAll('.stat-item h4');
-        if (statItems[0]) animateCounter(statItems[0], stats.pdf);
-        if (statItems[1]) animateCounter(statItems[1], stats.video);
-        if (statItems[2]) animateCounter(statItems[2], stats.audio);
-        if (statItems[3]) animateCounter(statItems[3], stats.downloads);
+    function redirectLogin() {
+        localStorage.removeItem('access_token');
+        sessionStorage.removeItem('access_token');
+        window.location.href = '/login/';
     }
 
-    function updateStatsFromType(type) {
-        const mapping = { 'PDF': 0, 'Video': 1, 'Audio': 2 };
-        const index = mapping[type];
-        if (index !== undefined) {
-            const counter = document.querySelectorAll('.stat-item h4')[index];
-            if (counter) animateCounter(counter, parseInt(counter.textContent) + 1);
-        }
-    }
-
-    function animateCounter(element, targetValue) {
-        element.textContent = targetValue;
-        element.style.transform = 'scale(1.3)';
-        element.style.color = '#667eea';
-        setTimeout(() => {
-            element.style.transform = 'scale(1)';
-            element.style.color = '#1e293b';
-        }, 300);
-    }
-
-    // Utilities
-    function scrollToUpload() {
-        elements.uploadArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    function highlightUploadArea() {
-        elements.uploadArea.style.animation = 'pulse 1s ease 2';
-        setTimeout(() => {
-            elements.uploadArea.style.animation = '';
-        }, 2000);
+    function debounce(fn, wait) {
+        let t;
+        return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
     }
 
     function showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-
-        const colors = {
-            success: '#10b981',
-            warning: '#f59e0b',
-            error: '#ef4444',
-            info: '#3b82f6'
-        };
-
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: ${colors[type]};
-            color: white;
-            padding: 1rem 2rem;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            z-index: 10000;
-            font-weight: 600;
-            animation: slideInRight 0.4s ease;
+        const colors = { success:'#10b981', warning:'#f59e0b', error:'#ef4444', info:'#3b82f6' };
+        const n = document.createElement('div');
+        n.style.cssText = `
+            position:fixed;top:20px;right:20px;z-index:10000;
+            background:${colors[type]};color:white;
+            padding:.9rem 1.5rem;border-radius:10px;
+            font-weight:600;font-size:.9rem;
+            box-shadow:0 8px 24px rgba(0,0,0,.15);
+            animation:slideInRight .3s ease;
         `;
-
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.style.animation = 'slideOutRight 0.4s ease';
-            setTimeout(() => notification.remove(), 400);
-        }, 3000);
+        n.textContent = message;
+        document.body.appendChild(n);
+        setTimeout(() => { n.style.opacity = '0'; n.style.transition = 'opacity .3s'; setTimeout(() => n.remove(), 300); }, 3000);
     }
 
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
+    // ============================================================
+    // MODAL STYLES (injected once)
+    // ============================================================
+    function injectModalStyles() {
+        if (document.getElementById('modal-styles')) return;
+        const s = document.createElement('style');
+        s.id = 'modal-styles';
+        s.textContent = `
+            @keyframes shimmer { to { background-position:-200% 0; } }
+            @keyframes slideInRight { from { transform:translateX(80px);opacity:0; } to { transform:translateX(0);opacity:1; } }
+            @keyframes spin { to { transform:rotate(360deg); } }
+            .modal-overlay {
+                position:fixed;inset:0;background:rgba(0,0,0,.5);
+                display:flex;align-items:center;justify-content:center;
+                z-index:9999;backdrop-filter:blur(4px);
+            }
+            .modal-content {
+                background:white;padding:2rem;border-radius:20px;
+                width:90%;box-shadow:0 25px 50px rgba(0,0,0,.25);
+            }
+            .form-group { margin-bottom:1rem; }
+            .form-group label { display:block;margin-bottom:.4rem;color:#475569;font-weight:600;font-size:.875rem; }
+            .form-group input,.form-group textarea,.form-group select {
+                width:100%;padding:.7rem .9rem;border:2px solid #e2e8f0;
+                border-radius:8px;font-family:inherit;font-size:.9rem;box-sizing:border-box;
+                transition:border-color .2s;
+            }
+            .form-group input:focus,.form-group textarea:focus,.form-group select:focus {
+                outline:none;border-color:#667eea;
+            }
+            .form-group small { display:block;margin-top:.35rem;font-size:.78rem; }
+            .modal-actions { display:flex;gap:1rem;justify-content:flex-end;margin-top:1.5rem; }
+            .btn-secondary {
+                padding:.7rem 1.4rem;border:2px solid #e2e8f0;background:white;
+                border-radius:8px;cursor:pointer;font-weight:600;color:#64748b;
+            }
+            .btn-secondary:hover { border-color:#667eea;color:#667eea; }
+            .btn-primary {
+                padding:.7rem 1.4rem;border:none;
+                background:linear-gradient(135deg,#667eea,#764ba2);
+                color:white;border-radius:8px;cursor:pointer;font-weight:600;
+            }
+            .btn-primary:hover { opacity:.9; }
+            .upload-spinner {
+                width:50px;height:50px;border:4px solid #e2e8f0;
+                border-top-color:#667eea;border-radius:50%;
+                animation:spin 1s linear infinite;margin:0 auto 1rem;
+            }
+            .tag { display:inline-block;padding:.2rem .6rem;border-radius:6px;font-size:.78rem;font-weight:600;margin-right:.3rem; }
+            .niveau-tag  { background:#ede9fe;color:#5b21b6; }
+            .groupe-tag  { background:#dbeafe;color:#1d4ed8; }
+            .type-tag    { background:#f0fdf4;color:#15803d; }
+            .visible-tag { background:#ecfdf5;color:#059669; }
+            .hidden-tag  { background:#fef2f2;color:#dc2626; }
+        `;
+        document.head.appendChild(s);
     }
 
-    // Add CSS animations
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.4); }
-            50% { transform: scale(1.02); box-shadow: 0 0 0 20px rgba(102, 126, 234, 0); }
-        }
-
-        @keyframes slideInRight {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        @keyframes slideOutRight {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .upload-spinner {
-            width: 60px;
-            height: 60px;
-            border: 4px solid #e2e8f0;
-            border-top-color: #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
-        }
-
-        .progress-list {
-            margin-top: 1.5rem;
-            text-align: left;
-            max-width: 400px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .progress-item {
-            margin-bottom: 1rem;
-        }
-
-        .file-name {
-            font-size: 0.875rem;
-            color: #64748b;
-            margin-bottom: 0.5rem;
-            display: block;
-        }
-
-        .progress-bar-container {
-            height: 6px;
-            background: #e2e8f0;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            border-radius: 3px;
-            transition: width 0.3s ease;
-        }
-
-        .edit-modal .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-            backdrop-filter: blur(5px);
-        }
-
-        .edit-modal .modal-content {
-            background: white;
-            padding: 2rem;
-            border-radius: 20px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-            animation: modalPop 0.3s ease;
-        }
-
-        @keyframes modalPop {
-            from { transform: scale(0.9); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        .edit-modal h2 {
-            margin-bottom: 1.5rem;
-            color: #1e293b;
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #64748b;
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
-
-        .form-group input,
-        .form-group textarea,
-        .form-group select {
-            width: 100%;
-            padding: 0.75rem;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-family: inherit;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input:focus,
-        .form-group textarea:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .form-group textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 1rem;
-            justify-content: flex-end;
-            margin-top: 1.5rem;
-        }
-
-        .btn-secondary {
-            padding: 0.75rem 1.5rem;
-            border: 2px solid #e2e8f0;
-            background: white;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            color: #64748b;
-            transition: all 0.3s;
-        }
-
-        .btn-secondary:hover {
-            border-color: #667eea;
-            color: #667eea;
-        }
-
-        .btn-primary {
-            padding: 0.75rem 1.5rem;
-            border: none;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: transform 0.3s;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-    `;
-
-    document.head.appendChild(style);
 });

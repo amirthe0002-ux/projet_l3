@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de Bord - Parent</title>
+
+    <link rel="stylesheet" href="{% static 'css/dashbord_parent.css' %}">
+<script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=tzHov-6mAuIZ9tLpjuJO2075kQaa9DIPmmeFt0bL1bW6s2Rh74fCW5JyhF1ru-81c_p5wven13ngZYlqS9c3lgfvr7VoZR3Afj0zCdLjg1UXyjW4U3rrAsJI_o4L3q_e16Y-hsZf87_3_9WaKMUARXz-dyMU3ZIFyAihdUbYNJOb2vJI5w5bODxfbj5Zj8mmcrnddCBsYUjkjFtms-Yo7ryerFLXWR12FQDyf_yPOBoL8I3mWjY8OD1tUv1-awaIygIaPHxDcpYCs2KpEwvNKdYba4sldxKkJZUjKN1R90Y" charset="UTF-8"></script><link rel="stylesheet" crossorigin="anonymous" href="https://gc.kis.v2.scr.kaspersky-labs.com/E3E8934C-235A-4B0E-825A-35A08381A191/abn/main.css?attr=aHR0cHM6Ly9jZG4uZGlzY29yZGFwcC5jb20vYXR0YWNobWVudHMvMTQ3NzA3OTY0ODU0MTA4NTcwMS8xNDk2MjA2NzI4NTU0MDkwNTE2L2Rhc2hib2FyZF9wYXJlbnQuaHRtbD9leD02OWU5MGE5YSZpcz02OWU3YjkxYSZobT1jYzQ4YzY1NDNmNjA3MmI1MzE2YTUxNmEzODFjMDk5YzFjOTkxMGY5YjRiYmE3NDZkNzQ0YTA1YTZiN2E4OGEyJg"/></head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
+                <div>
+                    <div class="logo-title">LanguePro</div>
+                    <div class="logo-subtitle">Espace Parent</div>
+                </div>
+            </div>
+            <div class="parent-profile">
+                <div class="parent-avatar">MP</div>
+                <div>
+                    <div class="parent-name">M. Parent</div>
+                    <div class="parent-email">parent@email.com</div>
+                </div>
+            </div>
+            <nav class="nav">
+                <a href="{% url 'dashboard_parent' %}"  class="nav-item"><i class="fas fa-chart-line"></i><span>Tableau de Bord</span></a>
+                <a href="{% url 'suivi_enfant' %}" class="nav-item active"><i class="fas fa-chart-line"></i><span>Suivi Enfant</span></a>
+                <a href="{% url 'messagerie_parent' %}"  class="nav-item"><i class="fas fa-star"></i><span>Messagerie</span></a>
+               <a href="{% url 'mes_ressourcess' %}"  class="nav-item"><i class="fas fa-chart-line"></i><span>Ressources</span></a>
+                <a href="#" class="nav-item" id="logoutLink">
+                <i class="fas fa-sign-out-alt"></i><span>Déconnexion</span>
+        </aside>
+
+        <main class="main">
+            <header class="header">
+                <h1>Tableau de Bord</h1>
+                <button class="notification-btn"><i class="fas fa-bell"></i><span class="notification-dot"></span></button>
+            </header>
+
+            <div class="children-tabs">
+                <button class="child-tab active">
+                    <div class="child-avatar" style="background: linear-gradient(135deg, #3b82f6, #06b6d4);">AS</div>
+                    <div>
+                        <div class="child-name">Ali Saoudi</div>
+                        <div class="child-level">Niveau B1</div>
+                    </div>
+                </button>
+                <button class="child-tab">
+                    <div class="child-avatar" style="background: linear-gradient(135deg, #ec4899, #f472b6);">SA</div>
+                    <div>
+                        <div class="child-name">Sara Saoudi</div>
+                        <div class="child-level">Niveau A2</div>
+                    </div>
+                </button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon blue"><i class="fas fa-star"></i></div>
+                    <div class="stat-content">
+                        <h3>Moyenne Générale</h3>
+                        <p class="stat-value">14.5</p>
+                        <p class="stat-change up">+1.2 ce trimestre</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green"><i class="fas fa-layer-group"></i></div>
+                    <div class="stat-content">
+                        <h3>Niveau Actuel</h3>
+                        <p class="stat-value">B1</p>
+                        <p class="stat-change">Progression normale</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon orange"><i class="fas fa-user-check"></i></div>
+                    <div class="stat-content">
+                        <h3>Assiduité</h3>
+                        <p class="stat-value">92%</p>
+                        <p class="stat-change">2 absences ce mois</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon purple"><i class="fas fa-trophy"></i></div>
+                    <div class="stat-content">
+                        <h3>Classement</h3>
+                        <p class="stat-value">3ème</p>
+                        <p class="stat-change">Sur 12 élèves</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+ <script src="{% static 'js/dashboard_parent.js' %}"></script>
+</html>
