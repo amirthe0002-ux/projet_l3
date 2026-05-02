@@ -4,46 +4,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connexion - Secrétariat</title>
+    <title>Connexion - LinguaSchool</title>
     <link rel="stylesheet" href="{% static 'css/login.css' %}">
-    
+    <base target="_blank">
 <base target="_blank">
 </head>
 <body>
 
 <div class="split-container" id="splitContainer">
 
-    <!-- LEFT SIDE - Dark Branding -->
+    <!-- LEFT SIDE - Branding -->
     <div class="split-left" id="splitLeft">
         <div class="left-content">
             <div class="brand-logo">
                 <div class="logo-icon">
-                    <i class="fas fa-graduation-cap"></i>
+                    <i class="fas fa-globe"></i>
                 </div>
                 <h1>LinguaSchool</h1>
             </div>
 
             <div class="welcome-text">
-                <h2>Bienvenue dans<br><span>l'Espace Secrétariat</span></h2>
-                <p>Gestion administrative et pédagogique de votre centre de langues. Accédez à tous les outils de gestion en un clic.</p>
+                <h2>Bienvenue à<br><span>LinguaSchool</span></h2>
+                <p>Votre centre de langues moderne. Apprenez, progressez et découvrez de nouvelles cultures avec nos cours adaptés à tous les niveaux.</p>
             </div>
 
             <div class="features-list">
                 <div class="feature-item">
+                    <i class="fas fa-language"></i>
+                    <span>Cours dans 8 langues</span>
+                </div>
+                <div class="feature-item">
                     <i class="fas fa-users"></i>
-                    <span>Gestion des étudiants</span>
+                    <span>Professeurs natifs certifiés</span>
                 </div>
                 <div class="feature-item">
-                    <i class="fas fa-chalkboard-teacher"></i>
-                    <span>Suivi des professeurs</span>
+                    <i class="fas fa-calendar-check"></i>
+                    <span>Horaires flexibles</span>
                 </div>
                 <div class="feature-item">
-                    <i class="fas fa-calendar-alt"></i>
-                    <span>Planning & emplois du temps</span>
-                </div>
-                <div class="feature-item">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Statistiques & rapports</span>
+                    <i class="fas fa-certificate"></i>
+                    <span>Certifications reconnues</span>
                 </div>
             </div>
 
@@ -67,10 +67,10 @@
         <div class="right-initial" id="rightInitial">
             <div class="initial-content">
                 <div class="user-icon">
-                    <i class="fas fa-user-tie"></i>
+                    <i class="fas fa-user-circle"></i>
                 </div>
-                <h3>Espace Secrétariat</h3>
-                <p>Connectez-vous pour accéder à votre tableau de bord</p>
+                <h3>Espace Personnel</h3>
+                <p>Connectez-vous pour accéder à votre espace personnel</p>
                 <button class="btn-enter" id="btnEnter" onclick="showLogin()">
                     <span>Se Connecter</span>
                     <i class="fas fa-arrow-right"></i>
@@ -84,11 +84,10 @@
 
                 <div class="logo-section">
                     <div class="logo-icon">
-                        <i class="fas fa-user-tie"></i>
+                        <i class="fas fa-globe"></i>
                     </div>
-                    <h1>Espace Secrétariat</h1>
-                    <p>Centre de Langues - Gestion Administrative</p>
-                    <span class="role-badge">Secrétaire</span>
+                    <h1>LinguaSchool</h1>
+                    <p>Centre de Langues - Espace Personnel</p>
                 </div>
 
                 <!-- Alerte -->
@@ -108,7 +107,7 @@
                         <label>Adresse Email</label>
                         <div class="input-wrapper">
                             <i class="fas fa-envelope"></i>
-                            <input type="email" id="email" placeholder="secretaire@centre.com"
+                            <input type="email" id="email" placeholder="votre@email.com"
                                    required autocomplete="email">
                         </div>
                     </div>
@@ -142,10 +141,14 @@
                     <button type="submit" class="btn-login" id="btnLogin">
                         <span class="spinner"></span>
                         <span class="btn-text">
-                            <i class="fas fa-sign-in-alt"></i> Accéder au Tableau de Bord
+                            <i class="fas fa-sign-in-alt"></i> Accéder à mon Espace
                         </span>
                     </button>
                 </form>
+
+                <div class="signup-link">
+                    <p>Pas encore inscrit ? <a href="#">Créer un compte</a></p>
+                </div>
 
                 <div class="security-info">
                     <p>
@@ -172,19 +175,11 @@ function showLogin() {
     const rightInitial = document.getElementById('rightInitial');
     const loginWrapper = document.getElementById('loginFormWrapper');
 
-    // Add fullscreen class to container
     container.classList.add('fullscreen-mode');
-
-    // Animate left side out
     left.classList.add('slide-out');
-
-    // Expand right side to full width
     right.classList.add('expand-full');
-
-    // Hide initial content
     rightInitial.classList.add('hidden');
 
-    // Show login form with delay for smooth transition
     setTimeout(() => {
         loginWrapper.classList.add('show');
     }, 400);
@@ -197,21 +192,12 @@ function hideLogin() {
     const rightInitial = document.getElementById('rightInitial');
     const loginWrapper = document.getElementById('loginFormWrapper');
 
-    // Hide login form
     loginWrapper.classList.remove('show');
 
-    // Wait for form to fade out
     setTimeout(() => {
-        // Remove fullscreen mode
         container.classList.remove('fullscreen-mode');
-
-        // Bring left side back
         left.classList.remove('slide-out');
-
-        // Reset right side
         right.classList.remove('expand-full');
-
-        // Show initial content
         rightInitial.classList.remove('hidden');
     }, 300);
 }

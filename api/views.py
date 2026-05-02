@@ -242,26 +242,35 @@ def salaires_view(request):
 # TEMPLATE VIEWS — DIRIGEANT
 # ============================================================
 
-@role_required('Dirigeant')
+
 def dashboard_dirigeant(request):
-    return render(request, 'dashboard_dirigeant.html', {'user': request.user, 'page': 'dashboard'})
+    return render(request, 'dashboard_der.html', {'user': request.user, 'page': 'dashboard'})
 
-@role_required('Dirigeant')
+
 def parametres_view(request):
-    return render(request, 'dirigeant/parametres.html', {'user': request.user, 'page': 'parametres'})
+    return render(request, 'parametres.html', {'user': request.user, 'page': 'parametres'})
 
-@role_required('Dirigeant')
+
 def audit_view(request):
-    return render(request, 'dirigeant/audit.html', {'user': request.user, 'page': 'audit'})
+    from django.db.models import Count
+    counts = Audit.objects.values('action').annotate(total=Count('id'))
+    audit_counts = {item['action']: item['total'] for item in counts}
+    return render(request, 'audit.html', {
+        'user': request.user,
+        'page': 'audit',
+        'audit_counts': audit_counts,
+    })
 
-@role_required('Dirigeant')
+
 def utilisateurs_view(request):
-    return render(request, 'dirigeant/utilisateurs.html', {'user': request.user, 'page': 'utilisateurs'})
+    return render(request, 'utilisateurs.html', {'user': request.user, 'page': 'utilisateurs'})
 
-@role_required('Dirigeant')
+
 def rapports_view(request):
-    return render(request, 'dirigeant/rapports.html', {'user': request.user, 'page': 'rapports'})
+    return render(request, 'rapports.html', {'user': request.user, 'page': 'rapports'})
 
+def finance_view(request):
+    return render(request, 'finance.html', {'user': request.user, 'page': 'finance'})
 
 # ============================================================
 # TEMPLATE VIEWS — ENSEIGNANT
@@ -966,7 +975,7 @@ class GroupeDetailView(APIView):
         return Response(GroupeSerializer(obj).data)
 
     def put(self, request, pk):
-        if request.user.role not in ['Secretariat', 'Dirigeant']:
+        if request.user.role not in ['Secretariat', 'Dirigeant', 'Enseignant']:
             return Response({'error': 'Permission refusée.'}, status=403)
         obj = self.get_object(pk)
         if not obj:
@@ -1089,6 +1098,25 @@ class PlanningListCreateView(APIView):
         if serializer.is_valid():
             planning = serializer.save()
             log_audit(request, 'CREATE', 'Planning', planning.pk)
+            try:
+                if planning.groupe:
+                    etudiants = Etudiant.objects.filter(
+                        groupe=planning.groupe
+                    ).select_related('user')
+                    jours = {'Lundi':'Lundi','Mardi':'Mardi','Mercredi':'Mercredi',
+                             'Jeudi':'Jeudi','Vendredi':'Vendredi','Samedi':'Samedi'}
+                    jour = jours.get(planning.jour, planning.jour)
+                    for etudiant in etudiants:
+                        Notification.objects.create(
+                            utilisateur=etudiant.user,
+                            type_notification='Planning',
+                            titre='📅 Planning mis à jour',
+                            contenu=f'Nouvelle séance ajoutée : {jour} {planning.heure_debut} — {planning.heure_fin}.',
+                            canal='App',
+                            lien_action='/etudiant/planning/',
+                        )
+            except Exception:
+                pass
             return Response(PlanningSerializer(planning).data, status=201)
         return Response(serializer.errors, status=400)
 
@@ -1375,7 +1403,7 @@ class AbsenceDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ============================================================
 
 class PaiementListCreateView(APIView):
-    permission_classes = [IsComptable]
+    permission_classes = [IsComptableOrDirigeant]
 
     def get(self, request):
         qs        = Paiement.objects.select_related('etudiant__user').all()
@@ -1425,7 +1453,7 @@ class PaiementListCreateView(APIView):
 class PaiementDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Paiement.objects.select_related('etudiant__user').all()
     serializer_class = PaiementSerializer
-    permission_classes = [IsComptable]
+    permission_classes = [IsComptableOrDirigeant]
 
 
 # ============================================================
@@ -1433,7 +1461,7 @@ class PaiementDetailView(generics.RetrieveUpdateDestroyAPIView):
 # ============================================================
 
 class BulletinListCreateView(APIView):
-    permission_classes = [IsComptable]
+    permission_classes = [IsComptableOrDirigeant]
 
     def get(self, request):
         qs            = BulletinSalaire.objects.select_related('enseignant__user').all()
@@ -1469,7 +1497,7 @@ class BulletinListCreateView(APIView):
 class BulletinDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = BulletinSalaire.objects.select_related('enseignant__user').all()
     serializer_class = BulletinSalaireSerializer
-    permission_classes = [IsComptable]
+    permission_classes = [IsComptableOrDirigeant]
 
 
 # ============================================================
@@ -1713,6 +1741,12 @@ class NotificationListView(APIView):
         if statut:
             qs = qs.filter(statut_notification=statut)
         return Response(NotificationSerializer(qs, many=True).data)
+    def post(self, request):
+        serializer = NotificationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class MarquerNotificationLueView(APIView):
@@ -1781,6 +1815,8 @@ class AuditListView(generics.ListAPIView):
     permission_classes = [IsDirigeant]
 
     def get_queryset(self):
+      
+            
         qs      = super().get_queryset()
         action  = self.request.query_params.get('action')
         entite  = self.request.query_params.get('entite')
@@ -1789,7 +1825,12 @@ class AuditListView(generics.ListAPIView):
         if entite:  qs = qs.filter(entite=entite)
         if user_id: qs = qs.filter(utilisateur_id=user_id)
         return qs
-
+    def list(self, request, *args, **kwargs):
+        if request.query_params.get('stats') == '1':
+            from django.db.models import Count
+            counts = self.get_queryset().values('action').annotate(total=Count('id'))
+            return Response({item['action']: item['total'] for item in counts})
+        return super().list(request, *args, **kwargs)
 
 # ============================================================
 # API — UTILISATEUR DETAIL
@@ -1818,7 +1859,36 @@ class UtilisateurDetailView(APIView):
     def patch(self, request, pk):
         return self.put(request, pk)
 
+class UtilisateurListView(APIView):
+    """GET /api/utilisateurs/  — list + create users"""
+    permission_classes = [IsDirigeant]
 
+    def get(self, request):
+        qs = Utilisateur.objects.all().order_by('-date_inscription')
+
+        role   = request.query_params.get('role')
+        statut = request.query_params.get('statut')
+        search = request.query_params.get('search')
+
+        if role:   qs = qs.filter(role=role)
+        if statut: qs = qs.filter(statut=statut)
+        if search:
+            qs = qs.filter(
+                Q(first_name__icontains=search) |
+                Q(last_name__icontains=search)  |
+                Q(email__icontains=search)
+            )
+
+        return Response(UtilisateurSerializer(qs, many=True).data)
+
+    def post(self, request):
+        serializer = UtilisateurCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            log_audit(request, 'CREATE', 'Utilisateur', user.pk,
+                      nouvelle_valeur={'email': user.email, 'role': user.role})
+            return Response(UtilisateurSerializer(user).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 # ============================================================
 # API — DASHBOARD KPIs
 # ============================================================

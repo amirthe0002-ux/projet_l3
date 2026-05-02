@@ -1,856 +1,716 @@
-/**
- * Gestion des Groupes - Secrétariat
- * FIXED: Detail modal with students, language filter on teachers, missing fields
- */
+// groupe.js - Group Management System with Database Integration
+// FIX: Student count now loaded from GET /api/etudiants/?groupe=<id> for each group
+//      so the displayed number matches the actual enrolled students, not the stale
+//      `nombre_etudiants` field stored on the group model (which can be out of sync).
 
-const API_URL = '/api';
+document.addEventListener('DOMContentLoaded', function () {
 
-const state = {
-    groupes: [],
-    enseignants: [],
-    searchTerm: '',
-};
-
-// ─── JWT ──────────────────────────────────────────────────────────────────────
-function getToken() {
-    return localStorage.getItem('access_token') || sessionStorage.getItem('access_token') ||
-           localStorage.getItem('access') || sessionStorage.getItem('access') || null;
-}
-function getUser() {
-    try { return JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user')); }
-    catch { return null; }
-}
-function authHeaders() {
-    const token = getToken();
-    const h = { 'Content-Type': 'application/json' };
-    if (token) h['Authorization'] = `Bearer ${token}`;
-    return h;
-}
-
-// ─── API ──────────────────────────────────────────────────────────────────────
-async function apiFetch(endpoint, options = {}) {
-    try {
-        const res = await fetch(`${API_URL}${endpoint}`, {
-            ...options,
-            headers: { ...authHeaders(), ...options.headers },
-        });
-        if (res.status === 401) return { error: 'JWT_INVALID',  message: 'Token invalide. Reconnectez-vous.' };
-        if (res.status === 403) return { error: 'FORBIDDEN',    message: 'Accès refusé.' };
-        if (res.status === 204) return { success: true };
-        const data = await res.json();
-        if (!res.ok) return { error: 'API_ERROR', message: flattenErrors(data) };
-        return data;
-    } catch (e) {
-        return { error: 'NETWORK_ERROR', message: 'Serveur inaccessible.' };
+    // ─── Auth ─────────────────────────────────────────────────────────────────
+    function getAuthToken() {
+        return (
+            localStorage.getItem('access') ||
+            sessionStorage.getItem('access') ||
+            localStorage.getItem('access_token') ||
+            sessionStorage.getItem('access_token') ||
+            null
+        );
     }
-}
 
-function flattenErrors(data) {
-    if (typeof data === 'string') return data;
-    if (data.detail) return data.detail;
-    if (data.error)  return data.error;
-    const msgs = [];
-    for (const [k, v] of Object.entries(data)) {
-        if (Array.isArray(v))         msgs.push(`${k}: ${v.join(', ')}`);
-        else if (typeof v === 'object') msgs.push(`${k}: ${flattenErrors(v)}`);
-        else msgs.push(`${k}: ${v}`);
+    const state = {
+        groups:        [],
+        studentCounts: {},   // FIX: { groupId: realCount }
+        currentFilter: 'all',
+        searchQuery:   '',
+        apiBaseUrl:    '/api',
+        authToken:     getAuthToken(),
+    };
+
+    const elements = {
+        filterBtns: document.querySelectorAll('.filter-btn'),
+        groupsGrid: document.querySelector('.groups-grid'),
+    };
+
+    init();
+
+    // ─── Init ──────────────────────────────────────────────────────────────────
+    function init() {
+        if (!state.authToken) {
+            showNotification('❌ Veuillez vous connecter d\'abord', 'error');
+            setTimeout(() => window.location.href = '/login/', 2000);
+            return;
+        }
+        injectStyles();
+        injectModal();
+        createSearchBox();
+        setupEventListeners();
+        loadGroupsFromDatabase();
     }
-    return msgs.join(' | ') || 'Erreur inconnue.';
-}
 
-// ─── Session ──────────────────────────────────────────────────────────────────
-function checkSession() {
-    const token = getToken();
-    const user  = getUser();
-    if (!token || !user) { window.location.href = '/login/'; return null; }
-    if (!['Secretariat', 'Comptable', 'Dirigeant'].includes(user.role)) {
-        window.location.href = '/login/'; return null;
+    // ─── Search box ────────────────────────────────────────────────────────────
+    function createSearchBox() {
+        const searchContainer = document.createElement('div');
+        searchContainer.className = 'search-container';
+        searchContainer.style.cssText = 'margin-bottom:2rem;position:relative;max-width:400px;';
+        searchContainer.innerHTML = `
+            <span style="position:absolute;left:1rem;top:50%;transform:translateY(-50%);color:#94a3b8;">🔍</span>
+            <input type="text" id="groupSearch" placeholder="Rechercher un groupe..."
+                style="width:100%;padding:1rem 1rem 1rem 3rem;border:2px solid #e2e8f0;
+                       border-radius:12px;font-size:1rem;transition:all .3s;box-sizing:border-box;">`;
+        const filters = document.querySelector('.filters');
+        if (filters) filters.parentNode.insertBefore(searchContainer, filters.nextSibling);
+
+        document.getElementById('groupSearch').addEventListener('input', debounce(e => {
+            state.searchQuery = e.target.value.toLowerCase();
+            filterGroups();
+        }, 300));
     }
-    return user;
-}
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
-function showToast(message, type = 'info') {
-    document.querySelector('.toast-grp')?.remove();
-    const colors = { success:'#059669', error:'#dc2626', warning:'#d97706', info:'#0284c7' };
-    const t = document.createElement('div');
-    t.className = 'toast-grp';
-    t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;padding:14px 22px;
-        border-radius:12px;background:${colors[type]};color:white;font-weight:500;font-size:.9rem;
-        box-shadow:0 8px 24px rgba(0,0,0,.2);transition:all .3s;max-width:400px;`;
-    t.textContent = message;
-    document.body.appendChild(t);
-    setTimeout(() => t.remove(), 3500);
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function langueFlag(langue) {
-    if (!langue) return '🌐';
-    const l = langue.toLowerCase();
-    if (l.includes('angl'))  return '🇬🇧';
-    if (l.includes('franc')) return '🇫🇷';
-    if (l.includes('allem')) return '🇩🇪';
-    if (l.includes('espag')) return '🇪🇸';
-    if (l.includes('ital'))  return '🇮🇹';
-    return '🌐';
-}
-function formatPrice(v) {
-    if (!v) return '0';
-    const n = parseFloat(v);
-    return n >= 1000 ? (n/1000).toFixed(1).replace('.0','') + 'k' : n.toString();
-}
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; }
-
-// ─── Input styles (dark) ──────────────────────────────────────────────────────
-const INP = `width:100%;padding:.75rem;border:2px solid #475569;border-radius:8px;
-             background:#1e293b;color:#fff;font-size:.9rem;box-sizing:border-box;`;
-const LBL = `display:block;margin-bottom:.4rem;font-weight:600;color:#fff;font-size:.875rem;`;
-
-// ─── Load enseignants ─────────────────────────────────────────────────────────
-async function loadEnseignants() {
-    const data = await apiFetch('/enseignants/');
-    if (!data?.error) {
-        state.enseignants = Array.isArray(data) ? data : (data.results || []);
-    }
-}
-
-// ─── Build teacher options filtered by language ───────────────────────────────
-function buildTeacherOptions(selectedLang = '', selectedId = null) {
-    const lang = (selectedLang || '').toLowerCase().trim();
-
-    // Try exact match first (e.g. "Anglais" == "Anglais")
-    let filtered = state.enseignants.filter(e => {
-        const el = (e.langue_enseignee || '').toLowerCase().trim();
-        return el === lang;
-    });
-
-    // If no exact match, try partial (one contains the other)
-    if (!filtered.length && lang) {
-        filtered = state.enseignants.filter(e => {
-            const el = (e.langue_enseignee || '').toLowerCase().trim();
-            return el.includes(lang) || lang.includes(el);
+    // ─── Event listeners ───────────────────────────────────────────────────────
+    function setupEventListeners() {
+        elements.filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                setActiveFilter(btn);
+                state.currentFilter = btn.textContent.trim().toLowerCase();
+                filterGroups();
+            });
         });
     }
 
-    // If still nothing, show ALL teachers with their language label
-    // so the user is never blocked
-    const showingAll = !filtered.length;
-    if (showingAll) filtered = state.enseignants;
+    // ─── Load groups + real student counts ────────────────────────────────────
+    // FIX: After loading groups, we fetch /api/etudiants/?groupe=<id> for every
+    //      group in parallel and store the real count in state.studentCounts.
+    //      This guarantees the card shows actual enrolled students.
+    async function loadGroupsFromDatabase() {
+        try {
+            showLoadingState();
 
-    if (!filtered.length) {
-        return `<option value="">-- Aucun professeur disponible --</option>`;
+            // 1. Load groups
+            const res = await apiGet('/groupes/');
+            state.groups = Array.isArray(res) ? res : (res.results || []);
+
+            // 2. Load real student counts for all groups in parallel
+            await loadRealStudentCounts(state.groups);
+
+            // 3. Render with real counts
+            renderGroups(state.groups);
+            updateFilterCounts(state.groups);
+
+        } catch (err) {
+            console.error('Error loading groups:', err);
+            showNotification('❌ Erreur lors du chargement des groupes', 'error');
+        }
     }
 
-    const prefix = showingAll && lang
-        ? `<option value="" disabled style="color:#f59e0b;">⚠ Aucun prof de "${selectedLang}" — tous affichés</option>`
-        : `<option value="">-- Sélectionner un professeur --</option>`;
+    // FIX: Fetch each group's actual students and store count
+    async function loadRealStudentCounts(groups) {
+        const promises = groups.map(async g => {
+            try {
+                const data = await apiGet(`/etudiants/?groupe=${g.id}`);
+                const list = Array.isArray(data) ? data : (data.results || []);
+                state.studentCounts[g.id] = list.length;
+            } catch (_) {
+                // Fallback to API field if individual fetch fails
+                state.studentCounts[g.id] = g.nombre_etudiants ?? 0;
+            }
+        });
+        await Promise.all(promises);
+    }
 
-    return prefix + filtered.map(e => {
-        const nom = e.nom_complet ||
-            `${e.user?.first_name||''} ${e.user?.last_name||''}`.trim() ||
-            `Prof #${e.id}`;
-        const langLabel = e.langue_enseignee ? ` (${e.langue_enseignee})` : '';
-        const sel = e.id === selectedId ? 'selected' : '';
-        return `<option value="${e.id}" ${sel}>${nom}${showingAll ? langLabel : ''}</option>`;
-    }).join('');
-}
+    // ─── API helper ────────────────────────────────────────────────────────────
+    async function apiGet(path) {
+        const res = await fetch(state.apiBaseUrl + path, {
+            headers: {
+                'Authorization': `Bearer ${state.authToken}`,
+                'Content-Type':  'application/json',
+            }
+        });
+        if (res.status === 401) { handleAuthError(); throw new Error('Unauthorized'); }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+    }
 
-// ─── Load groupes ─────────────────────────────────────────────────────────────
-async function loadGroupes() {
-    const timeline = document.querySelector('.groups-timeline');
-    if (!timeline) return;
-
-    timeline.innerHTML = `
-        <div style="text-align:center;padding:3rem;color:#94a3b8;">
-            <i class="fas fa-spinner fa-spin" style="font-size:2rem;margin-bottom:1rem;display:block;"></i>
-            <p>Chargement des groupes...</p>
-        </div>`;
-
-    const data = await apiFetch('/groupes/');
-    if (data?.error) {
-        showToast('Erreur: ' + data.message, 'error');
-        timeline.innerHTML = `
-            <div style="text-align:center;padding:3rem;color:#dc2626;">
-                <p>${data.message}</p>
-                <button onclick="loadGroupes()" style="margin-top:1rem;padding:8px 16px;
-                    background:#6366f1;color:white;border:none;border-radius:8px;cursor:pointer;">
-                    Réessayer
-                </button>
+    // ─── Render ────────────────────────────────────────────────────────────────
+    function showLoadingState() {
+        elements.groupsGrid.innerHTML = `
+            <div style="grid-column:1/-1;text-align:center;padding:4rem;">
+                <div style="width:50px;height:50px;border:4px solid #e2e8f0;
+                            border-top-color:#667eea;border-radius:50%;
+                            animation:spin 1s linear infinite;margin:0 auto 1rem;"></div>
+                <p style="color:#64748b;">Chargement des groupes...</p>
             </div>`;
-        return;
     }
 
-    state.groupes = Array.isArray(data) ? data : (data.results || []);
-
-    if (!state.groupes.length) {
-        timeline.innerHTML = `
-            <div style="text-align:center;padding:3rem;color:#94a3b8;">
-                <i class="fas fa-layer-group" style="font-size:3rem;margin-bottom:1rem;display:block;"></i>
-                <p style="font-size:1.1rem;font-weight:600;">Aucun groupe trouvé</p>
-                <p style="font-size:.875rem;margin-top:.5rem;">Créez votre premier groupe ci-dessus</p>
-            </div>`;
-        return;
+    function renderGroups(groups) {
+        elements.groupsGrid.innerHTML = '';
+        if (!groups.length) { showNoResults(); return; }
+        groups.forEach(g => elements.groupsGrid.appendChild(createGroupCard(g)));
+        setupCardActions();
     }
 
-    renderGroupes();
-    showToast(`${state.groupes.length} groupe(s) chargé(s)`, 'success');
-}
+    function createGroupCard(group) {
+        const card = document.createElement('div');
+        card.className     = 'group-card';
+        card.dataset.id     = group.id;
+        card.dataset.status = (group.statut_groupe || 'actif').toLowerCase();
+        card.dataset.name   = (group.nom_groupe || '').toLowerCase();
+        card.dataset.langue = (group.langue || '').toLowerCase();
+        card.dataset.niveau = (group.niveau || '').toLowerCase();
 
-// ─── Render groupes ───────────────────────────────────────────────────────────
-function renderGroupes() {
-    const timeline = document.querySelector('.groups-timeline');
-    if (!timeline) return;
-    timeline.innerHTML = '';
+        const levelColors = {
+            'A1': 'linear-gradient(135deg,#84fab0 0%,#8fd3f4 100%)',
+            'A2': 'linear-gradient(135deg,#667eea 0%,#764ba2 100%)',
+            'B1': 'linear-gradient(135deg,#f093fb 0%,#f5576c 100%)',
+            'B2': 'linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)',
+            'C1': 'linear-gradient(135deg,#ff9a56 0%,#ff6a88 100%)',
+        };
+        const scheduleBg     = { 'A1':'#e0f8f7','A2':'#eff6ff','B1':'#fdf2f8','B2':'#ecfeff','C1':'#fef2f2' };
+        const scheduleBorder = { 'A1':'#06b6d4','A2':'#667eea','B1':'#ec4899','B2':'#06b6d4','C1':'#dc2626' };
+        const scheduleTitle  = { 'A1':'#155e75','A2':'#1e40af','B1':'#9d174d','B2':'#155e75','C1':'#7f1d1d' };
+        const scheduleText   = { 'A1':'#0e7490','A2':'#3b82f6','B1':'#be185d','B2':'#0e7490','C1':'#991b1b' };
 
-    const slots = {};
-    state.groupes.forEach(g => {
-        const key = extractTimeSlot(g);
-        if (!slots[key]) slots[key] = [];
-        slots[key].push(g);
-    });
+        const bg       = levelColors[group.niveau] || levelColors['A1'];
+        const isActive = (group.statut_groupe || 'Actif') === 'Actif';
 
-    Object.keys(slots).forEach(timeKey => {
-        const slotGroupes = slots[timeKey];
-        const isEvening   = timeKey.includes('18') || timeKey.includes('19') || timeKey.includes('20');
-        const slotDiv     = document.createElement('div');
-        slotDiv.className = 'time-slot';
-        slotDiv.innerHTML = `
-            <div class="time-header">
-                <span class="time-badge" ${isEvening ? 'style="background:linear-gradient(135deg,#f59e0b,#d97706);"' : ''}>
-                    <i class="fas ${isEvening ? 'fa-moon' : 'fa-sun'}"></i> ${timeKey}
+        // FIX: use the real count fetched from the students endpoint
+        const nb = state.studentCounts[group.id] ?? group.nombre_etudiants ?? 0;
+
+        card.innerHTML = `
+            <div class="group-header" style="background:${bg};">
+                <span class="status-badge ${isActive ? 'status-active' : 'status-completed'}">
+                    ${isActive ? 'Actif' : 'Terminé'}
                 </span>
-                <span class="time-info">Créneau • ${slotGroupes[0].salle || 'Salle non définie'}</span>
-            </div>`;
-        const rowDiv = document.createElement('div');
-        rowDiv.className = 'groups-row';
-        slotGroupes.forEach(g => rowDiv.appendChild(createGroupCard(g)));
-        slotDiv.appendChild(rowDiv);
-        timeline.appendChild(slotDiv);
-    });
-}
-
-function extractTimeSlot(groupe) {
-    if (groupe.planning && Array.isArray(groupe.planning) && groupe.planning.length > 0) {
-        const p = groupe.planning[0];
-        return `${(p.heure_debut||'09:00').substring(0,5)} - ${(p.heure_fin||'11:00').substring(0,5)}`;
-    }
-    const name = (groupe.nom_groupe || '').toLowerCase();
-    if (name.includes('soir')  || name.includes('18')) return '18:00 - 20:00';
-    if (name.includes('midi')  || name.includes('11')) return '11:00 - 13:00';
-    if (name.includes('apres') || name.includes('14')) return '14:00 - 16:00';
-    return '09:00 - 11:00';
-}
-
-function createGroupCard(groupe) {
-    const card = document.createElement('div');
-    card.className = 'group-card';
-    card.dataset.id   = groupe.id;
-    card.dataset.lang = (groupe.langue || '').toLowerCase();
-
-    const nb  = groupe.nb_etudiants_reel ?? groupe.nombre_etudiants ?? 0;
-    const cap = groupe.capacite_max || 15;
-    const pct = Math.round((nb / cap) * 100);
-
-    card.innerHTML = `
-        <div class="group-header">
-            <span class="group-level">${groupe.niveau || 'N/A'}</span>
-            <span class="group-lang">${langueFlag(groupe.langue)} ${groupe.langue || '—'}</span>
-        </div>
-        <h3 class="group-name">${groupe.nom_groupe || '—'}</h3>
-        <p class="group-teacher">
-            <i class="fas fa-chalkboard-teacher"></i> Prof. ${groupe.enseignant_nom || 'Non assigné'}
-        </p>
-        <div class="group-stats">
-            <div class="g-stat">
-                <div class="g-stat-value">${nb}</div>
-                <div class="g-stat-label">Étudiants</div>
+                <span class="group-level">${group.niveau || 'A1'}</span>
+                <h3 class="group-title">${escapeHtml(group.nom_groupe || 'Groupe sans nom')}</h3>
+                <span class="group-lang">🇬🇧 ${escapeHtml(group.langue || 'Anglais')} - ${getNiveauLabel(group.niveau)}</span>
             </div>
-            <div class="g-stat">
-                <div class="g-stat-value">${cap}</div>
-                <div class="g-stat-label">Capacité</div>
-            </div>
-            <div class="g-stat">
-                <div class="g-stat-value">${formatPrice(groupe.tarif_mensuel)}</div>
-                <div class="g-stat-label">Prix DA</div>
-            </div>
-        </div>
-        <div style="margin:10px 0 4px;">
-            <div style="display:flex;justify-content:space-between;font-size:.75rem;color:#94a3b8;margin-bottom:4px;">
-                <span>Remplissage</span><span>${pct}%</span>
-            </div>
-            <div style="height:6px;background:#334155;border-radius:3px;">
-                <div style="height:100%;width:${pct}%;background:${pct>85?'#ef4444':pct>60?'#f59e0b':'#10b981'};border-radius:3px;transition:width .5s;"></div>
-            </div>
-        </div>
-        <div class="group-footer">
-            <button class="btn-group btn-view" onclick="openModalDetails(${groupe.id})">
-                <i class="fas fa-eye"></i> Voir
-            </button>
-            <button class="btn-group btn-edit" onclick="openModalModifier(${groupe.id})">
-                <i class="fas fa-edit"></i> Modifier
-            </button>
-        </div>`;
-    return card;
-}
-
-// ─── MODAL DETAILS ────────────────────────────────────────────────────────────
-async function openModalDetails(groupeId) {
-    const g = state.groupes.find(x => x.id === groupeId);
-    if (!g) return;
-
-    // Create modal immediately with loading state
-    const modal = document.createElement('div');
-    modal.id = 'modal-details';
-    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;
-        display:flex;align-items:center;justify-content:center;`;
-
-    modal.innerHTML = `
-        <div style="background:#0f172a;border:2px solid #6366f1;border-radius:16px;
-                    width:90%;max-width:680px;max-height:90vh;overflow:hidden;
-                    display:flex;flex-direction:column;box-shadow:0 25px 50px rgba(0,0,0,.6);"
-             onclick="event.stopPropagation()">
-
-            <!-- Header -->
-            <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:1.25rem 1.5rem;
-                        display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-                <div>
-                    <h3 style="margin:0;color:#fff;font-size:1.15rem;">${g.nom_groupe}</h3>
-                    <p style="margin:4px 0 0;color:rgba(255,255,255,.75);font-size:.85rem;">
-                        ${langueFlag(g.langue)} ${g.langue||'—'} · Niveau ${g.niveau||'—'}
+            <div class="group-body">
+                <div class="stats-row">
+                    <div class="stat-box">
+                        <span class="stat-number" id="nb-${group.id}">${nb}</span>
+                        <span class="stat-label">Étudiants</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-number">${group.moyenne_groupe || '—'}</span>
+                        <span class="stat-label">Moyenne</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-number">${group.taux_assiduité || '—'}%</span>
+                        <span class="stat-label">Assiduité</span>
+                    </div>
+                </div>
+                <div class="schedule-info"
+                     style="background:${scheduleBg[group.niveau]||'#eff6ff'};
+                            border-color:${scheduleBorder[group.niveau]||'#667eea'};">
+                    <h4 style="color:${scheduleTitle[group.niveau]||'#1e40af'};">📅 Planning</h4>
+                    <p style="color:${scheduleText[group.niveau]||'#3b82f6'};">
+                        ${escapeHtml(group.salle || 'Salle non assignée')}
                     </p>
                 </div>
-                <button onclick="document.getElementById('modal-details').remove()"
-                        style="background:rgba(255,255,255,.2);border:none;color:#fff;
-                               width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1.1rem;">×</button>
-            </div>
-
-            <!-- Tabs -->
-            <div style="display:flex;background:#1e293b;border-bottom:1px solid #334155;flex-shrink:0;">
-                <button id="tabInfoBtn" onclick="switchTab('info')"
-                        style="flex:1;padding:12px;border:none;background:transparent;
-                               color:#6366f1;font-weight:700;font-size:.875rem;cursor:pointer;
-                               border-bottom:3px solid #6366f1;">
-                    📋 Informations
-                </button>
-                <button id="tabStudentsBtn" onclick="switchTab('students')"
-                        style="flex:1;padding:12px;border:none;background:transparent;
-                               color:#94a3b8;font-weight:600;font-size:.875rem;cursor:pointer;
-                               border-bottom:3px solid transparent;">
-                    👥 Étudiants <span id="studentCountBadge" style="background:#334155;color:#94a3b8;
-                        padding:1px 7px;border-radius:10px;font-size:.75rem;margin-left:4px;">...</span>
-                </button>
-            </div>
-
-            <!-- Tab: Info -->
-            <div id="tabInfo" style="padding:1.25rem 1.5rem;overflow-y:auto;flex:1;">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1.25rem;">
-                    ${[
-                        ['👨‍🏫 Professeur', g.enseignant_nom || 'Non assigné'],
-                        ['🏫 Salle',        g.salle || 'Non définie'],
-                        ['👥 Étudiants',    `${g.nb_etudiants_reel ?? g.nombre_etudiants ?? 0} / ${g.capacite_max || 15}`],
-                        ['💰 Prix',         `${formatPrice(g.tarif_mensuel)} DA/mois`],
-                        ['📅 Début',        fmtDate(g.date_debut)],
-                        ['📅 Fin',          g.date_fin ? fmtDate(g.date_fin) : 'Non définie'],
-                        ['📊 Statut',       g.statut_groupe || 'Actif'],
-                        ['🔢 Places libres',g.places_restantes ?? '—'],
-                    ].map(([lb, v]) => `
-                        <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:.75rem 1rem;">
-                            <div style="color:#94a3b8;font-size:.75rem;margin-bottom:3px;">${lb}</div>
-                            <div style="color:#fff;font-weight:600;font-size:.9rem;">${v}</div>
-                        </div>`).join('')}
-                </div>
-                <div style="display:flex;gap:.75rem;margin-top:auto;padding-top:.5rem;">
-                    <button onclick="document.getElementById('modal-details').remove();openModalModifier(${groupeId})"
-                            style="flex:1;padding:.75rem;background:#3b82f6;color:#fff;border:none;
-                                   border-radius:8px;cursor:pointer;font-weight:600;">
-                        <i class="fas fa-edit"></i> Modifier
-                    </button>
-                    <button onclick="supprimerGroupe(${groupeId})"
-                            style="flex:1;padding:.75rem;background:#ef4444;color:#fff;border:none;
-                                   border-radius:8px;cursor:pointer;font-weight:600;">
-                        <i class="fas fa-trash"></i> Supprimer
-                    </button>
-                </div>
-            </div>
-
-            <!-- Tab: Students -->
-            <div id="tabStudents" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
-                <!-- Search -->
-                <div style="padding:.75rem 1.5rem;border-bottom:1px solid #334155;flex-shrink:0;">
-                    <input id="etudiantSearch" type="text" placeholder="🔍 Rechercher un étudiant..."
-                           oninput="filterStudentRows(this.value)"
-                           style="width:100%;padding:.6rem 1rem;background:#1e293b;border:2px solid #334155;
-                                  border-radius:8px;color:#fff;font-size:.875rem;box-sizing:border-box;">
-                </div>
-                <!-- Table -->
-                <div style="overflow-y:auto;flex:1;padding:.75rem 1.5rem;">
-                    <div id="studentsLoading" style="text-align:center;padding:2rem;color:#94a3b8;">
-                        <i class="fas fa-spinner fa-spin" style="font-size:1.5rem;margin-bottom:.5rem;display:block;"></i>
-                        Chargement des étudiants...
+                <div class="progress-section">
+                    <div class="progress-header">
+                        <span>Progression du programme</span>
+                        <span>${group.progression || 0}%</span>
                     </div>
-                    <table id="studentsTable" style="display:none;width:100%;border-collapse:collapse;font-size:.85rem;">
-                        <thead>
-                            <tr style="border-bottom:2px solid #334155;">
-                                <th style="padding:.6rem .75rem;text-align:left;color:#94a3b8;font-weight:600;">#</th>
-                                <th style="padding:.6rem .75rem;text-align:left;color:#94a3b8;font-weight:600;">Nom</th>
-                                <th style="padding:.6rem .75rem;text-align:left;color:#94a3b8;font-weight:600;">Email</th>
-                                <th style="padding:.6rem .75rem;text-align:center;color:#94a3b8;font-weight:600;">Niveau</th>
-                                <th style="padding:.6rem .75rem;text-align:center;color:#94a3b8;font-weight:600;">Moyenne</th>
-                                <th style="padding:.6rem .75rem;text-align:center;color:#94a3b8;font-weight:600;">Statut</th>
-                            </tr>
-                        </thead>
-                        <tbody id="studentsTbody"></tbody>
-                    </table>
-                    <div id="studentsEmpty" style="display:none;text-align:center;padding:2rem;color:#64748b;">
-                        <div style="font-size:2.5rem;margin-bottom:.75rem;">👤</div>
-                        <p>Aucun étudiant dans ce groupe</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:${group.progression || 0}%;background:${bg};"></div>
                     </div>
                 </div>
-            </div>
-        </div>`;
-
-    document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-
-    // Load students in background
-    loadStudentsForGroup(groupeId);
-}
-
-function switchTab(tab) {
-    const isInfo = tab === 'info';
-    document.getElementById('tabInfo').style.display     = isInfo ? 'block' : 'none';
-    document.getElementById('tabStudents').style.display = isInfo ? 'none'  : 'flex';
-    document.getElementById('tabInfoBtn').style.cssText     += isInfo
-        ? ';color:#6366f1;border-bottom:3px solid #6366f1;'
-        : ';color:#94a3b8;border-bottom:3px solid transparent;';
-    document.getElementById('tabStudentsBtn').style.cssText += !isInfo
-        ? ';color:#6366f1;border-bottom:3px solid #6366f1;'
-        : ';color:#94a3b8;border-bottom:3px solid transparent;';
-}
-
-async function loadStudentsForGroup(groupeId) {
-    const data = await apiFetch(`/etudiants/?groupe=${groupeId}`);
-    const loading = document.getElementById('studentsLoading');
-    const table   = document.getElementById('studentsTable');
-    const empty   = document.getElementById('studentsEmpty');
-    const badge   = document.getElementById('studentCountBadge');
-
-    if (!loading) return; // modal was closed
-
-    const students = !data?.error ? (Array.isArray(data) ? data : []) : [];
-
-    if (badge) {
-        badge.textContent = students.length;
-        badge.style.background = students.length ? '#6366f1' : '#334155';
-        badge.style.color      = students.length ? '#fff'    : '#94a3b8';
+                <div class="students-preview">
+                    <div class="avatar-stack">${generateAvatars(nb, bg)}</div>
+                    <span class="more-students">
+                        ${nb > 3 ? (nb - 3) + ' autres étudiants' : 'Voir détails'}
+                    </span>
+                </div>
+                <div class="group-actions" style="margin-top:1.5rem;">
+                    <button class="btn-action btn-primary view-details-btn"
+                            data-id="${group.id}"
+                            data-name="${escapeHtml(group.nom_groupe || '')}"
+                            style="background:${bg};">
+                        📊 Voir Détails
+                    </button>
+                    <button class="btn-action btn-secondary notes-btn" data-id="${group.id}">
+                        📝 Notes
+                    </button>
+                </div>
+            </div>`;
+        return card;
     }
 
-    loading.style.display = 'none';
-
-    if (!students.length) {
-        empty.style.display = 'block';
-        return;
+    function setupCardActions() {
+        document.querySelectorAll('.view-details-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                openGroupModal(btn.dataset.id, btn.dataset.name);
+            });
+        });
+        document.querySelectorAll('.notes-btn').forEach(btn => {
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                window.location.href = `/enseignant/notes/?groupe=${btn.dataset.id}`;
+            });
+        });
     }
 
-    table.style.display = 'table';
-    const tbody = document.getElementById('studentsTbody');
-    tbody.innerHTML = students.map((s, i) => {
-        const nom    = s.user ? `${s.user.first_name} ${s.user.last_name}` : '—';
-        const email  = s.user?.email || '—';
-        const niveau = s.niveau_actuel || '—';
-        const moy    = s.moyenne_generale != null ? Number(s.moyenne_generale).toFixed(1) : '—';
-        const statut = s.statut_etudiant || 'Actif';
-        const initials = nom.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0,2).toUpperCase();
-        const moyColor = parseFloat(moy) >= 14 ? '#10b981' : parseFloat(moy) >= 10 ? '#3b82f6' : '#ef4444';
-
-        return `
-            <tr class="student-row" style="border-bottom:1px solid #1e293b;transition:background .15s;"
-                onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background=''">
-                <td style="padding:.6rem .75rem;color:#64748b;">${i+1}</td>
-                <td style="padding:.6rem .75rem;">
-                    <div style="display:flex;align-items:center;gap:.6rem;">
-                        <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);
-                                    color:#fff;display:flex;align-items:center;justify-content:center;
-                                    font-size:.7rem;font-weight:700;flex-shrink:0;">${initials}</div>
-                        <span style="color:#e2e8f0;font-weight:500;">${nom}</span>
+    // ─── MODAL ─────────────────────────────────────────────────────────────────
+    function injectModal() {
+        const modal = document.createElement('div');
+        modal.id = 'groupModal';
+        modal.innerHTML = `
+            <div class="gm-overlay" id="gmOverlay">
+                <div class="gm-panel">
+                    <div class="gm-header" id="gmHeader">
+                        <div>
+                            <h2 class="gm-title" id="gmTitle">Détails du groupe</h2>
+                            <p class="gm-subtitle" id="gmSubtitle"></p>
+                        </div>
+                        <button class="gm-close" id="gmClose">✕</button>
                     </div>
-                </td>
-                <td style="padding:.6rem .75rem;color:#94a3b8;font-size:.8rem;">${email}</td>
-                <td style="padding:.6rem .75rem;text-align:center;">
-                    <span style="background:#312e81;color:#a5b4fc;padding:2px 8px;border-radius:8px;font-size:.75rem;font-weight:700;">${niveau}</span>
-                </td>
-                <td style="padding:.6rem .75rem;text-align:center;color:${moyColor};font-weight:700;">${moy}/20</td>
-                <td style="padding:.6rem .75rem;text-align:center;">
-                    <span style="padding:2px 8px;border-radius:8px;font-size:.75rem;font-weight:600;
-                        background:${statut==='Actif'?'rgba(16,185,129,.15)':'rgba(239,68,68,.15)'};
-                        color:${statut==='Actif'?'#10b981':'#ef4444'};">${statut}</span>
-                </td>
-            </tr>`;
-    }).join('');
-}
-
-function filterStudentRows(query) {
-    const q = query.toLowerCase();
-    document.querySelectorAll('#studentsTbody .student-row').forEach(row => {
-        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
-    });
-}
-
-// ─── MODAL NOUVEAU GROUPE ─────────────────────────────────────────────────────
-async function openModalNouveau() {
-    // Always reload to get fresh data
-    await loadEnseignants();
-
-    const today = new Date().toISOString().split('T')[0];
-
-    const modal = document.createElement('div');
-    modal.id = 'modal-groupe';
-    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;
-        display:flex;align-items:center;justify-content:center;`;
-
-    modal.innerHTML = `
-        <div style="background:#0f172a;border:2px solid #6366f1;border-radius:16px;padding:2rem;
-                    width:90%;max-width:520px;max-height:90vh;overflow-y:auto;color:#fff;
-                    box-shadow:0 25px 50px rgba(0,0,0,.6);" onclick="event.stopPropagation()">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
-                <h3 style="margin:0;color:#fff;font-size:1.15rem;">
-                    <i class="fas fa-plus-circle" style="color:#6366f1;margin-right:8px;"></i>Nouveau Groupe
-                </h3>
-                <button onclick="document.getElementById('modal-groupe').remove()"
-                        style="background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;">×</button>
-            </div>
-
-            <div style="display:grid;gap:.9rem;">
-                <!-- Nom -->
-                <div>
-                    <label style="${LBL}">Nom du groupe *</label>
-                    <input type="text" id="new_nom" placeholder="ex: Anglais A2 - Matin" style="${INP}">
-                </div>
-
-                <!-- Niveau + Langue -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="${LBL}">Niveau *</label>
-                        <select id="new_niveau" style="${INP}">
-                            ${['A1','A2','B1','B2','C1','C2'].map(n=>`<option value="${n}">${n}</option>`).join('')}
-                        </select>
+                    <div class="gm-tabs">
+                        <button class="gm-tab active" data-tab="students">👥 Étudiants</button>
+                        <button class="gm-tab" data-tab="planning">📅 Planning</button>
                     </div>
-                    <div>
-                        <label style="${LBL}">Langue *</label>
-                        <select id="new_langue" onchange="updateTeacherOptions(this.value)" style="${INP}">
-                            ${['Anglais','Français','Allemand','Espagnol','Italien']
-                              .map(l=>`<option value="${l}">${langueFlag(l)} ${l}</option>`).join('')}
-                        </select>
+                    <div class="gm-body" id="tabStudents">
+                        <div class="gm-search-row">
+                            <input type="text" id="studentSearch" placeholder="🔍 Rechercher un étudiant..." class="gm-search">
+                            <span class="gm-count" id="studentCount"></span>
+                        </div>
+                        <div class="gm-table-wrap">
+                            <table class="gm-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th><th>Étudiant</th><th>Email</th>
+                                        <th>Niveau</th><th>Moyenne</th><th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="studentsTbody"></tbody>
+                            </table>
+                        </div>
+                        <div class="gm-empty" id="studentsEmpty" style="display:none;">
+                            <span>👤</span><p>Aucun étudiant dans ce groupe</p>
+                        </div>
+                    </div>
+                    <div class="gm-body" id="tabPlanning" style="display:none;">
+                        <div id="planningContent"></div>
+                        <div class="gm-empty" id="planningEmpty" style="display:none;">
+                            <span>📅</span><p>Aucun planning défini pour ce groupe</p>
+                        </div>
                     </div>
                 </div>
+            </div>`;
+        document.body.appendChild(modal);
 
-                <!-- Professeur (filtré par langue) -->
-                <div>
-                    <label style="${LBL}">Professeur *
-                        <span style="font-weight:400;color:#64748b;font-size:.75rem;"> (filtré par langue)</span>
-                    </label>
-                    <select id="new_enseignant" style="${INP}">
-                        ${buildTeacherOptions('Anglais')}
-                    </select>
-                </div>
+        document.getElementById('gmClose').addEventListener('click', closeModal);
+        document.getElementById('gmOverlay').addEventListener('click', e => {
+            if (e.target === document.getElementById('gmOverlay')) closeModal();
+        });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-                <!-- Salle + Capacité -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="${LBL}">Salle</label>
-                        <input type="text" id="new_salle" placeholder="Salle 101" style="${INP}">
-                    </div>
-                    <div>
-                        <label style="${LBL}">Capacité max *</label>
-                        <input type="number" id="new_capacite" value="15" min="1" style="${INP}">
-                    </div>
-                </div>
-
-                <!-- Tarif + Date début -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="${LBL}">Tarif mensuel (DA) *</label>
-                        <input type="number" id="new_tarif" placeholder="8000" style="${INP}">
-                    </div>
-                    <div>
-                        <label style="${LBL}">Date début *</label>
-                        <input type="date" id="new_date_debut" value="${today}" style="${INP}">
-                    </div>
-                </div>
-
-                <!-- Durée + Date fin -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="${LBL}">Durée (semaines)</label>
-                        <input type="number" id="new_duree" value="12" min="1" style="${INP}">
-                    </div>
-                    <div>
-                        <label style="${LBL}">Date fin (optionnel)</label>
-                        <input type="date" id="new_date_fin" style="${INP}">
-                    </div>
-                </div>
-
-                <!-- Error -->
-                <div id="newGrpError" style="display:none;padding:.75rem;background:rgba(239,68,68,.1);
-                     border:1px solid #ef4444;border-radius:8px;color:#fca5a5;font-size:.875rem;"></div>
-
-                <!-- Buttons -->
-                <div style="display:flex;gap:.75rem;margin-top:.5rem;">
-                    <button onclick="document.getElementById('modal-groupe').remove()"
-                            style="flex:1;padding:.875rem;border:2px solid #475569;background:#334155;
-                                   color:#fff;border-radius:8px;cursor:pointer;font-weight:600;">
-                        Annuler
-                    </button>
-                    <button id="btnCreate"
-                            style="flex:1;padding:.875rem;background:#6366f1;color:#fff;border:none;
-                                   border-radius:8px;cursor:pointer;font-weight:700;font-size:.95rem;">
-                        <i class="fas fa-save"></i> Créer le groupe
-                    </button>
-                </div>
-            </div>
-        </div>`;
-
-    document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-
-    document.getElementById('btnCreate').onclick = async () => {
-        const errEl = document.getElementById('newGrpError');
-        errEl.style.display = 'none';
-        const btn = document.getElementById('btnCreate');
-
-        const nom      = document.getElementById('new_nom').value.trim();
-        const niveau   = document.getElementById('new_niveau').value;
-        const langue   = document.getElementById('new_langue').value;
-        const ensId    = parseInt(document.getElementById('new_enseignant').value);
-        const salle    = document.getElementById('new_salle').value.trim();
-        const capacite = parseInt(document.getElementById('new_capacite').value) || 15;
-        const tarif    = parseFloat(document.getElementById('new_tarif').value);
-        const debut    = document.getElementById('new_date_debut').value;
-        const duree    = parseInt(document.getElementById('new_duree').value) || 12;
-        const fin      = document.getElementById('new_date_fin').value || null;
-
-        if (!nom || !ensId || !tarif || !debut) {
-            errEl.textContent = '⚠️ Veuillez remplir tous les champs obligatoires (*).';
-            errEl.style.display = 'block';
-            return;
-        }
-
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
-        btn.disabled  = true;
-
-        const payload = {
-            nom_groupe:      nom,
-            niveau,
-            langue,
-            enseignant:      ensId,
-            salle:           salle || '',
-            capacite_max:    capacite,
-            tarif_mensuel:   tarif,
-            date_debut:      debut,
-            date_fin:        fin,
-            duree_semaines:  duree,
-            statut_groupe:   'Actif',
-            nombre_etudiants: 0,
-        };
-
-        const result = await apiFetch('/groupes/', {
-            method: 'POST',
-            body: JSON.stringify(payload),
+        document.querySelectorAll('.gm-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.gm-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('tabStudents').style.display =
+                    tab.dataset.tab === 'students' ? 'block' : 'none';
+                document.getElementById('tabPlanning').style.display =
+                    tab.dataset.tab === 'planning' ? 'block' : 'none';
+            });
         });
 
-        if (result?.error) {
-            errEl.textContent = '❌ ' + result.message;
-            errEl.style.display = 'block';
-            btn.innerHTML = '<i class="fas fa-save"></i> Créer le groupe';
-            btn.disabled = false;
+        document.getElementById('studentSearch').addEventListener('input', e => {
+            filterStudentTable(e.target.value.toLowerCase());
+        });
+    }
+
+    function closeModal() {
+        const overlay = document.getElementById('gmOverlay');
+        overlay.style.animation = 'gmFadeOut .2s ease forwards';
+        setTimeout(() => {
+            overlay.style.animation = '';
+            document.getElementById('groupModal').style.display = 'none';
+        }, 200);
+    }
+
+    async function openGroupModal(groupId, groupName) {
+        document.querySelectorAll('.gm-tab').forEach((t, i) => t.classList.toggle('active', i === 0));
+        document.getElementById('tabStudents').style.display = 'block';
+        document.getElementById('tabPlanning').style.display = 'none';
+        document.getElementById('studentSearch').value = '';
+        document.getElementById('gmTitle').textContent = groupName || 'Détails du groupe';
+        document.getElementById('gmSubtitle').textContent = 'Chargement...';
+        document.getElementById('groupModal').style.display = 'block';
+
+        const group = state.groups.find(g => String(g.id) === String(groupId));
+        const levelColors = {
+            'A1':'linear-gradient(135deg,#84fab0,#8fd3f4)',
+            'A2':'linear-gradient(135deg,#667eea,#764ba2)',
+            'B1':'linear-gradient(135deg,#f093fb,#f5576c)',
+            'B2':'linear-gradient(135deg,#4facfe,#00f2fe)',
+            'C1':'linear-gradient(135deg,#ff9a56,#ff6a88)',
+        };
+        const bg = group ? (levelColors[group.niveau] || levelColors['A1']) : levelColors['A1'];
+        document.getElementById('gmHeader').style.background = bg;
+
+        const [students, plannings] = await Promise.all([
+            loadStudents(groupId),
+            loadPlanning(groupId),
+        ]);
+
+        // FIX: update the card's student count badge with the freshly loaded count
+        const realCount = students.length;
+        state.studentCounts[groupId] = realCount;
+        const nbEl = document.getElementById(`nb-${groupId}`);
+        if (nbEl) nbEl.textContent = realCount;
+
+        renderStudentsTab(students, group);
+        renderPlanningTab(plannings, group);
+    }
+
+    // ─── Students tab ──────────────────────────────────────────────────────────
+    async function loadStudents(groupId) {
+        try {
+            const data = await apiGet(`/etudiants/?groupe=${groupId}`);
+            return Array.isArray(data) ? data : (data.results || []);
+        } catch (_) { return []; }
+    }
+
+    function renderStudentsTab(students, group) {
+        const tbody    = document.getElementById('studentsTbody');
+        const empty    = document.getElementById('studentsEmpty');
+        const countEl  = document.getElementById('studentCount');
+        const subtitle = document.getElementById('gmSubtitle');
+
+        subtitle.textContent = group
+            ? `${group.langue || ''} · Niveau ${group.niveau || ''} · ${students.length} étudiant(s)`
+            : `${students.length} étudiant(s)`;
+
+        countEl.textContent = `${students.length} étudiant(s)`;
+
+        if (!students.length) {
+            tbody.innerHTML = '';
+            empty.style.display = 'block';
             return;
         }
+        empty.style.display = 'none';
 
-        modal.remove();
-        state.groupes.push(result);
-        renderGroupes();
-        showToast(`✅ Groupe "${nom}" créé avec succès !`, 'success');
-    };
-}
+        tbody.innerHTML = students.map((s, i) => {
+            const nom      = s.user ? `${s.user.first_name || ''} ${s.user.last_name || ''}`.trim() : '—';
+            const email    = s.user?.email || '—';
+            const niveau   = s.niveau_actuel || '—';
+            const moy      = s.moyenne_generale != null ? Number(s.moyenne_generale).toFixed(1) : '—';
+            const statut   = s.statut_etudiant || 'Actif';
+            const initials = nom.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || 'ET';
 
-// Update teacher dropdown when language changes
-function updateTeacherOptions(lang) {
-    const select = document.getElementById('new_enseignant');
-    if (!select) return;
-    select.innerHTML = buildTeacherOptions(lang);
-}
-window.updateTeacherOptions = updateTeacherOptions;
+            return `
+                <tr class="gm-row">
+                    <td class="gm-num">${i + 1}</td>
+                    <td>
+                        <div class="gm-student-cell">
+                            <div class="gm-avatar">${initials}</div>
+                            <span class="gm-student-name">${escapeHtml(nom)}</span>
+                        </div>
+                    </td>
+                    <td class="gm-email">${escapeHtml(email)}</td>
+                    <td><span class="gm-level-badge">${niveau}</span></td>
+                    <td class="gm-avg ${getMoyenneClass(moy)}">${moy !== '—' ? moy + '/20' : '—'}</td>
+                    <td>
+                        <span class="gm-status ${statut === 'Actif' ? 'gm-status-active' : 'gm-status-inactive'}">
+                            ${statut}
+                        </span>
+                    </td>
+                </tr>`;
+        }).join('');
+    }
 
-// ─── MODAL MODIFIER ───────────────────────────────────────────────────────────
-async function openModalModifier(groupeId) {
-    const g = state.groupes.find(x => x.id === groupeId);
-    if (!g) return;
+    function getMoyenneClass(moy) {
+        const v = parseFloat(moy);
+        if (isNaN(v)) return '';
+        if (v >= 16) return 'avg-excellent';
+        if (v >= 12) return 'avg-good';
+        return 'avg-low';
+    }
 
-    const modal = document.createElement('div');
-    modal.id = 'modal-modifier';
-    modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;
-        display:flex;align-items:center;justify-content:center;`;
+    function filterStudentTable(query) {
+        document.querySelectorAll('#studentsTbody .gm-row').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    }
 
-    modal.innerHTML = `
-        <div style="background:#0f172a;border:2px solid #3b82f6;border-radius:16px;padding:2rem;
-                    width:90%;max-width:520px;max-height:90vh;overflow-y:auto;color:#fff;
-                    box-shadow:0 25px 50px rgba(0,0,0,.6);" onclick="event.stopPropagation()">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
-                <h3 style="margin:0;color:#fff;font-size:1.15rem;">
-                    <i class="fas fa-edit" style="color:#3b82f6;margin-right:8px;"></i>Modifier le groupe
-                </h3>
-                <button onclick="document.getElementById('modal-modifier').remove()"
-                        style="background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;">×</button>
-            </div>
+    // ─── Planning tab ──────────────────────────────────────────────────────────
+    async function loadPlanning(groupId) {
+        try {
+            const data = await apiGet(`/plannings/?groupe=${groupId}`);
+            return Array.isArray(data) ? data : (data.results || []);
+        } catch (_) { return []; }
+    }
 
-            <div style="display:grid;gap:.9rem;">
-                <div>
-                    <label style="${LBL}">Nom du groupe</label>
-                    <input type="text" id="mod_nom" value="${g.nom_groupe || ''}" style="${INP}">
-                </div>
+    function renderPlanningTab(plannings, group) {
+        const container = document.getElementById('planningContent');
+        const empty     = document.getElementById('planningEmpty');
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="${LBL}">Niveau</label>
-                        <select id="mod_niveau" style="${INP}">
-                            ${['A1','A2','B1','B2','C1','C2'].map(n=>
-                                `<option value="${n}" ${g.niveau===n?'selected':''}>${n}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div>
-                        <label style="${LBL}">Langue</label>
-                        <select id="mod_langue" onchange="updateModTeacherOptions(this.value)" style="${INP}">
-                            ${['Anglais','Français','Allemand','Espagnol','Italien'].map(l=>
-                                `<option value="${l}" ${g.langue===l?'selected':''}>${langueFlag(l)} ${l}</option>`).join('')}
-                        </select>
-                    </div>
-                </div>
+        if (!plannings || !plannings.length) {
+            container.innerHTML = '';
+            empty.style.display = 'block';
+            return;
+        }
+        empty.style.display = 'none';
 
-                <div>
-                    <label style="${LBL}">Professeur
-                        <span style="font-weight:400;color:#64748b;font-size:.75rem;"> (filtré par langue)</span>
-                    </label>
-                    <select id="mod_enseignant" style="${INP}">
-                        ${buildTeacherOptions(g.langue, g.enseignant)}
-                    </select>
-                </div>
+        const dayOrder = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+        plannings.sort((a, b) => dayOrder.indexOf(a.jour) - dayOrder.indexOf(b.jour));
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="${LBL}">Salle</label>
-                        <input type="text" id="mod_salle" value="${g.salle||''}" style="${INP}">
-                    </div>
-                    <div>
-                        <label style="${LBL}">Capacité max</label>
-                        <input type="number" id="mod_capacite" value="${g.capacite_max||15}" min="1" style="${INP}">
-                    </div>
-                </div>
+        container.innerHTML = `
+            <div class="gm-planning-grid">
+                ${plannings.map(p => {
+                    const status      = p.statut_planning || 'Planifie';
+                    const statusLabel = { 'Planifie':'Planifié','Confirme':'Confirmé','Annule':'Annulé' }[status] || status;
+                    const statusColor = { 'Planifie':'#3b82f6','Confirme':'#10b981','Annule':'#ef4444' }[status] || '#6b7280';
+                    return `
+                        <div class="gm-planning-card">
+                            <div class="gm-planning-day">${p.jour || '—'}</div>
+                            <div class="gm-planning-time">
+                                🕐 ${p.heure_debut ? p.heure_debut.substring(0,5) : '—'}
+                                – ${p.heure_fin   ? p.heure_fin.substring(0,5)   : '—'}
+                            </div>
+                            <div class="gm-planning-salle">📍 ${escapeHtml(p.salle || 'Salle non définie')}</div>
+                            ${p.enseignant_nom ? `<div class="gm-planning-ens">👤 ${escapeHtml(p.enseignant_nom)}</div>` : ''}
+                            ${p.notes_planning ? `<div class="gm-planning-notes">${escapeHtml(p.notes_planning)}</div>` : ''}
+                            <div class="gm-planning-status" style="color:${statusColor};">● ${statusLabel}</div>
+                        </div>`;
+                }).join('')}
+            </div>`;
+    }
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="${LBL}">Tarif (DA)</label>
-                        <input type="number" id="mod_tarif" value="${g.tarif_mensuel||''}" style="${INP}">
-                    </div>
-                    <div>
-                        <label style="${LBL}">Statut</label>
-                        <select id="mod_statut" style="${INP}">
-                            ${['Actif','Cloture','Annule'].map(s=>
-                                `<option value="${s}" ${g.statut_groupe===s?'selected':''}>${s}</option>`).join('')}
-                        </select>
-                    </div>
-                </div>
+    // ─── Filters ────────────────────────────────────────────────────────────────
+    function setActiveFilter(activeBtn) {
+        elements.filterBtns.forEach(btn => {
+            btn.classList.remove('active');
+            btn.style.cssText = 'background:white;color:#64748b;border-color:#e2e8f0;';
+        });
+        activeBtn.classList.add('active');
+        activeBtn.style.cssText =
+            'background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;border-color:transparent;';
+    }
 
-                <div id="modGrpError" style="display:none;padding:.75rem;background:rgba(239,68,68,.1);
-                     border:1px solid #ef4444;border-radius:8px;color:#fca5a5;font-size:.875rem;"></div>
+    function filterGroups() {
+        let visible = 0;
+        document.querySelectorAll('.group-card').forEach(card => {
+            const status = card.dataset.status || '';
+            const name   = card.dataset.name   || '';
+            const langue = card.dataset.langue  || '';
+            const niveau = card.dataset.niveau  || '';
+            const f      = state.currentFilter;
 
-                <div style="display:flex;gap:.75rem;margin-top:.5rem;">
-                    <button onclick="document.getElementById('modal-modifier').remove()"
-                            style="flex:1;padding:.875rem;border:2px solid #475569;background:#334155;
-                                   color:#fff;border-radius:8px;cursor:pointer;font-weight:600;">
-                        Annuler
-                    </button>
-                    <button id="btnSave"
-                            style="flex:1;padding:.875rem;background:#3b82f6;color:#fff;border:none;
-                                   border-radius:8px;cursor:pointer;font-weight:700;">
-                        <i class="fas fa-save"></i> Enregistrer
-                    </button>
-                </div>
-            </div>
-        </div>`;
+            const matchSearch =
+                name.includes(state.searchQuery) ||
+                langue.includes(state.searchQuery) ||
+                niveau.includes(state.searchQuery);
 
-    document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+            let matchFilter = true;
+            if      (f.includes('actif'))                                matchFilter = status === 'actif';
+            else if (f.includes('terminé') || f.includes('termine'))    matchFilter = ['cloture','terminee','annule'].includes(status);
+            else if (f.includes('anglais'))                              matchFilter = langue === 'anglais';
+            else if (f.includes('français') || f.includes('francais'))  matchFilter = ['français','francais'].includes(langue);
 
-    document.getElementById('btnSave').onclick = async () => {
-        const errEl = document.getElementById('modGrpError');
-        errEl.style.display = 'none';
-        const btn = document.getElementById('btnSave');
-
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
-        btn.disabled  = true;
-
-        const payload = {
-            nom_groupe:    document.getElementById('mod_nom').value.trim(),
-            niveau:        document.getElementById('mod_niveau').value,
-            langue:        document.getElementById('mod_langue').value,
-            enseignant:    parseInt(document.getElementById('mod_enseignant').value),
-            salle:         document.getElementById('mod_salle').value.trim(),
-            capacite_max:  parseInt(document.getElementById('mod_capacite').value) || 15,
-            tarif_mensuel: parseFloat(document.getElementById('mod_tarif').value),
-            statut_groupe: document.getElementById('mod_statut').value,
-        };
-
-        const result = await apiFetch(`/groupes/${groupeId}/`, {
-            method: 'PUT',
-            body: JSON.stringify(payload),
+            const show = matchSearch && matchFilter;
+            card.style.display = show ? 'block' : 'none';
+            if (show) visible++;
         });
 
-        if (result?.error) {
-            errEl.textContent = '❌ ' + result.message;
-            errEl.style.display = 'block';
-            btn.innerHTML = '<i class="fas fa-save"></i> Enregistrer';
-            btn.disabled = false;
-            return;
+        let noRes = document.querySelector('.no-results');
+        if (visible === 0) {
+            if (!noRes) {
+                noRes = document.createElement('div');
+                noRes.className = 'no-results';
+                noRes.style.cssText = 'grid-column:1/-1;text-align:center;padding:4rem;';
+                noRes.innerHTML = `
+                    <span style="font-size:3rem;">🔍</span>
+                    <h3 style="color:#1e293b;margin:1rem 0;">Aucun groupe trouvé</h3>
+                    <p style="color:#64748b;">Modifiez vos critères de recherche</p>`;
+                elements.groupsGrid.appendChild(noRes);
+            }
+        } else {
+            noRes?.remove();
         }
+    }
 
-        const idx = state.groupes.findIndex(x => x.id === groupeId);
-        if (idx !== -1) state.groupes[idx] = result;
-        modal.remove();
-        renderGroupes();
-        showToast('✅ Groupe modifié avec succès !', 'success');
-    };
-}
+    function updateFilterCounts(groups) {
+        const total  = groups.length;
+        // FIX: use the real student count from state for any display that needs it
+        const actifs = groups.filter(g => (g.statut_groupe || 'Actif') === 'Actif').length;
+        elements.filterBtns.forEach(btn => {
+            const t = btn.textContent.toLowerCase();
+            if      (t.includes('tous'))    btn.textContent = `Tous (${total})`;
+            else if (t.includes('actif'))   btn.textContent = `Actifs (${actifs})`;
+            else if (t.includes('terminé')) btn.textContent = `Terminés (${total - actifs})`;
+        });
+    }
 
-function updateModTeacherOptions(lang) {
-    const select = document.getElementById('mod_enseignant');
-    if (!select) return;
-    const currentId = parseInt(select.value) || null;
-    select.innerHTML = buildTeacherOptions(lang, currentId);
-}
-window.updateModTeacherOptions = updateModTeacherOptions;
+    function showNoResults() {
+        elements.groupsGrid.innerHTML = `
+            <div style="grid-column:1/-1;text-align:center;padding:4rem;">
+                <span style="font-size:4rem;">👥</span>
+                <h3 style="color:#1e293b;margin:1rem 0;">Aucun groupe disponible</h3>
+                <p style="color:#64748b;">Contactez l'administration pour créer des groupes</p>
+            </div>`;
+    }
 
-// ─── Supprimer ────────────────────────────────────────────────────────────────
-async function supprimerGroupe(groupeId) {
-    const g = state.groupes.find(x => x.id === groupeId);
-    if (!confirm(`Supprimer le groupe "${g?.nom_groupe || groupeId}" ?`)) return;
+    // ─── Utilities ─────────────────────────────────────────────────────────────
+    function getNiveauLabel(n) {
+        return ({ 'A1':'Débutant','A2':'Intermédiaire','B1':'Avancé','B2':'Confirmé','C1':'Maîtrise' })[n] || 'Débutant';
+    }
 
-    const result = await apiFetch(`/groupes/${groupeId}/`, { method: 'DELETE' });
-    if (result?.error) { showToast('❌ ' + result.message, 'error'); return; }
+    function generateAvatars(count, bg) {
+        const ini  = ['AB','SK','ML','JD','AL','MK'];
+        let   html = '';
+        const show = Math.min(count, 3);
+        for (let i = 0; i < show; i++)
+            html += `<div class="avatar" style="background:${bg};">${ini[i] || 'ST'}</div>`;
+        if (count > 3)
+            html += `<div class="avatar" style="background:${bg};">+${count - 3}</div>`;
+        return html;
+    }
 
-    state.groupes = state.groupes.filter(x => x.id !== groupeId);
-    document.getElementById('modal-details')?.remove();
-    document.getElementById('modal-modifier')?.remove();
-    renderGroupes();
-    showToast('Groupe supprimé.', 'success');
-}
+    function escapeHtml(text) {
+        if (!text) return '';
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
+    }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-    const user = checkSession();
-    if (!user) return;
+    function debounce(func, wait) {
+        let t;
+        return (...args) => { clearTimeout(t); t = setTimeout(() => func(...args), wait); };
+    }
 
-    document.querySelector('.btn-primary')?.addEventListener('click', openModalNouveau);
+    function handleAuthError() {
+        ['access', 'access_token'].forEach(k => {
+            localStorage.removeItem(k);
+            sessionStorage.removeItem(k);
+        });
+        window.location.href = '/login/';
+    }
 
-    await loadEnseignants();
-    await loadGroupes();
+    function showNotification(message, type = 'info') {
+        const colors = { success:'#10b981', warning:'#f59e0b', error:'#ef4444', info:'#3b82f6' };
+        const n = document.createElement('div');
+        n.style.cssText = `
+            position:fixed;top:20px;right:20px;background:${colors[type]};color:white;
+            padding:1rem 2rem;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);
+            z-index:99999;font-weight:600;animation:slideInRight .4s ease;`;
+        n.textContent = message;
+        document.body.appendChild(n);
+        setTimeout(() => {
+            n.style.animation = 'slideOutRight .4s ease';
+            setTimeout(() => n.remove(), 400);
+        }, 3000);
+    }
+
+    // ─── Styles ────────────────────────────────────────────────────────────────
+    function injectStyles() {
+        const s = document.createElement('style');
+        s.textContent = `
+        @keyframes spin          { to { transform:rotate(360deg); } }
+        @keyframes fadeInUp      { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes gmFadeIn      { from{opacity:0} to{opacity:1} }
+        @keyframes gmFadeOut     { from{opacity:1} to{opacity:0} }
+        @keyframes gmSlideIn     { from{opacity:0;transform:translateY(30px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes slideInRight  { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+        @keyframes slideOutRight { from{transform:translateX(0);opacity:1} to{transform:translateX(100%);opacity:0} }
+
+        .group-card { transition:all .3s ease; }
+        .group-card:hover { transform:translateY(-5px); box-shadow:0 20px 25px -5px rgba(0,0,0,.1); }
+        .btn-action { transition:all .3s; }
+        .btn-action:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,.15); }
+        .progress-fill { transition:width .5s ease; }
+
+        .gm-overlay {
+            position:fixed;inset:0;background:rgba(15,23,42,.55);
+            display:flex;align-items:center;justify-content:center;
+            z-index:9999;backdrop-filter:blur(4px);animation:gmFadeIn .25s ease;
+        }
+        .gm-panel {
+            background:#fff;border-radius:20px;width:min(900px,95vw);
+            max-height:88vh;display:flex;flex-direction:column;
+            overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,.25);animation:gmSlideIn .3s ease;
+        }
+        .gm-header {
+            display:flex;justify-content:space-between;align-items:flex-start;
+            padding:24px 28px;color:#fff;flex-shrink:0;
+        }
+        .gm-title   { margin:0;font-size:1.4rem;font-weight:700; }
+        .gm-subtitle{ margin:4px 0 0;font-size:.9rem;opacity:.85; }
+        .gm-close {
+            background:rgba(255,255,255,.25);border:none;color:#fff;
+            width:36px;height:36px;border-radius:50%;font-size:16px;
+            cursor:pointer;display:flex;align-items:center;justify-content:center;
+            transition:background .2s;flex-shrink:0;
+        }
+        .gm-close:hover { background:rgba(255,255,255,.4); }
+        .gm-tabs {
+            display:flex;gap:0;border-bottom:2px solid #f1f5f9;
+            background:#f8fafc;flex-shrink:0;
+        }
+        .gm-tab {
+            padding:14px 28px;border:none;background:transparent;
+            font-size:.95rem;font-weight:600;color:#64748b;cursor:pointer;
+            border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;
+        }
+        .gm-tab.active          { color:#6366f1;border-bottom-color:#6366f1;background:#fff; }
+        .gm-tab:hover:not(.active) { color:#374151;background:#f1f5f9; }
+        .gm-body { padding:24px 28px;overflow-y:auto;flex:1; }
+        .gm-search-row { display:flex;align-items:center;gap:12px;margin-bottom:16px; }
+        .gm-search {
+            flex:1;padding:10px 16px;border:2px solid #e2e8f0;border-radius:10px;
+            font-size:.9rem;outline:none;transition:border .2s;
+        }
+        .gm-search:focus { border-color:#6366f1; }
+        .gm-count { font-size:.85rem;color:#64748b;white-space:nowrap; }
+        .gm-table-wrap { overflow-x:auto;border-radius:12px;border:1px solid #e2e8f0; }
+        .gm-table { width:100%;border-collapse:collapse;font-size:.88rem; }
+        .gm-table thead { background:#f8fafc; }
+        .gm-table th { padding:12px 16px;text-align:left;font-weight:600;color:#374151;white-space:nowrap; }
+        .gm-table td { padding:12px 16px;border-top:1px solid #f1f5f9; }
+        .gm-row:hover { background:#f8fafc; }
+        .gm-num { color:#9ca3af;font-size:.8rem;width:32px; }
+        .gm-student-cell { display:flex;align-items:center;gap:10px; }
+        .gm-avatar {
+            width:34px;height:34px;border-radius:50%;
+            background:linear-gradient(135deg,#667eea,#764ba2);
+            color:#fff;display:flex;align-items:center;justify-content:center;
+            font-size:.75rem;font-weight:700;flex-shrink:0;
+        }
+        .gm-student-name   { font-weight:600;color:#1e293b; }
+        .gm-email          { color:#64748b;font-size:.83rem; }
+        .gm-level-badge    {
+            display:inline-block;padding:2px 10px;border-radius:20px;
+            background:#ede9fe;color:#6d28d9;font-weight:700;font-size:.8rem;
+        }
+        .gm-avg            { font-weight:700; }
+        .avg-excellent     { color:#059669; }
+        .avg-good          { color:#0284c7; }
+        .avg-low           { color:#dc2626; }
+        .gm-status         { display:inline-block;padding:3px 10px;border-radius:20px;font-size:.8rem;font-weight:600; }
+        .gm-status-active  { background:#d1fae5;color:#065f46; }
+        .gm-status-inactive{ background:#fee2e2;color:#991b1b; }
+        .gm-empty          { text-align:center;padding:4rem 2rem;color:#94a3b8; }
+        .gm-empty span     { font-size:3rem; }
+        .gm-empty p        { margin-top:12px;font-size:1rem; }
+        .gm-planning-grid  { display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px; }
+        .gm-planning-card  {
+            background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;
+            padding:20px;display:flex;flex-direction:column;gap:8px;transition:box-shadow .2s;
+        }
+        .gm-planning-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.08); }
+        .gm-planning-day    { font-size:1.1rem;font-weight:700;color:#1e293b; }
+        .gm-planning-time   { font-size:.95rem;color:#374151;font-weight:600; }
+        .gm-planning-salle  { font-size:.88rem;color:#64748b; }
+        .gm-planning-ens    { font-size:.88rem;color:#64748b; }
+        .gm-planning-notes  {
+            font-size:.82rem;color:#94a3b8;font-style:italic;
+            border-top:1px solid #e2e8f0;padding-top:8px;margin-top:4px;
+        }
+        .gm-planning-status { font-size:.82rem;font-weight:600;margin-top:4px; }
+        `;
+        document.head.appendChild(s);
+    }
+
 });

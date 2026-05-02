@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Dirigeant - Gestion Établissement de Langues</title>
+   
+   <!-- Your existing CSS file -->
+   
+      <link rel="stylesheet" href="{% static 'css/dashboard_der.css' %}">
+  
+ </head>
+ <body>
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-72 glass-panel flex flex-col">
+            <div class="p-6 border-b border-slate-700">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center" style="background: linear-gradient(135deg, #6366f1, #9333ea);">
+                        <i class="fas fa-graduation-cap text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-white">LanguePro</h1>
+                        <p class="text-xs text-slate-400">Espace Dirigeant</p>
+                    </div>
+                </div>
+            </div>
+            
+            <nav class="flex-1 py-6 px-3 space-y-1">
+               <a href="{% url 'dashboard_dirigeant' %}" class="sidebar-link active">
+                    <i class="fas fa-chart-line w-5"></i>
+                    Tableau de Bord
+                </a>
+                <a href="{% url 'audit' %}" class="sidebar-link">
+                    <i class="fas fa-chalkboard-teacher w-5"></i>
+                    Audit & Logs
+                </a>
+                <a href="{% url 'utilisateurs' %}" class="sidebar-link ">
+                    <i class="fas fa-users-cog w-5 text-indigo-400"></i>
+                    Utilisateurs
+                </a>
+                <a href="{% url 'rapports' %}" class="sidebar-link">
+                    <i class="fas fa-users w-5"></i>
+                    Rapport
+                </a>
+            
+                <a href="{% url 'finance' %}" class="sidebar-link">
+                    <i class="fas fa-wallet w-5"></i>
+                    Finances
+                </a>
+                <a href="{% url 'parametres' %}" class="sidebar-link">
+                    <i class="fas fa-cog w-5"></i>
+                    Paramètres
+                </a>
+                <a href="#" class="sidebar-link logout-link">
+                    <i class="fas fa-sign-out-alt w-5"></i>
+                    Déconnexion
+                </a>
+            </nav>
+            
+            <div class="p-4 border-t border-slate-700">
+                <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50">
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff" class="w-10 h-10 rounded-full">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-white truncate">Directeur</p>
+                        <p class="text-xs text-slate-400 truncate">dirigeant@languepro.com</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto bg-slate-900">
+            <!-- Header -->
+            <header class="sticky top-0 z-20 glass-panel border-b border-slate-700 px-8 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Tableau de Bord</h2>
+                        <p class="text-sm text-slate-400">Vue d'ensemble de l'établissement • Avril 2026</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <button class="relative p-2 rounded-lg hover:bg-slate-800 transition-colors" style="position: relative;">
+                            <i class="fas fa-bell text-slate-400"></i>
+                            <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                        </button>
+                        <button class="btn-primary">
+                            <i class="fas fa-download mr-2"></i>Exporter Rapport
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="p-8 space-y-8">
+                <!-- KPIs Grid -->
+                <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 slide-in">
+                    <!-- KPI 1: Étudiants -->
+                    <div class="kpi-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="p-3 rounded-xl bg-indigo-500/20">
+                                <i class="fas fa-user-graduate text-2xl text-indigo-400"></i>
+                            </div>
+                            <span class="flex items-center text-emerald-400 text-sm font-medium">
+                                <i class="fas fa-arrow-up mr-1"></i>+12%
+                            </span>
+                        </div>
+                        <h3 class="text-3xl font-bold text-white mb-1">248</h3>
+                        <p class="text-slate-400 text-sm">Étudiants Actifs</p>
+                        <div class="mt-4 h-1 bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-500 rounded-full" style="width: 75%"></div>
+                        </div>
+                    </div>
+
+                    <!-- KPI 2: Enseignants -->
+                    <div class="kpi-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="p-3 rounded-xl bg-purple-500/20">
+                                <i class="fas fa-chalkboard-teacher text-2xl text-purple-400"></i>
+                            </div>
+                            <span class="flex items-center text-emerald-400 text-sm font-medium">
+                                <i class="fas fa-arrow-up mr-1"></i>+3
+                            </span>
+                        </div>
+                        <h3 class="text-3xl font-bold text-white mb-1">18</h3>
+                        <p class="text-slate-400 text-sm">Enseignants</p>
+                        <div class="mt-4 flex gap-1">
+                            <span class="badge badge-emerald">16 Actifs</span>
+                            <span class="badge badge-amber">2 Congé</span>
+                        </div>
+                    </div>
+
+                    <!-- KPI 3: Revenus -->
+                    <div class="kpi-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="p-3 rounded-xl bg-emerald-500/20">
+                                <i class="fas fa-coins text-2xl text-emerald-400"></i>
+                            </div>
+                            <span class="flex items-center text-emerald-400 text-sm font-medium">
+                                <i class="fas fa-arrow-up mr-1"></i>+8.5%
+                            </span>
+                        </div>
+                        <h3 class="text-3xl font-bold text-white mb-1">45,280 €</h3>
+                        <p class="text-slate-400 text-sm">Revenus ce mois</p>
+                        <p class="text-xs text-slate-500 mt-2">vs 41,720 € le mois dernier</p>
+                    </div>
+
+                    <!-- KPI 4: Taux Réussite -->
+                    <div class="kpi-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="p-3 rounded-xl bg-amber-500/20">
+                                <i class="fas fa-trophy text-2xl text-amber-400"></i>
+                            </div>
+                            <span class="flex items-center text-slate-400 text-sm font-medium">
+                                <i class="fas fa-minus mr-1"></i>0%
+                            </span>
+                        </div>
+                        <h3 class="text-3xl font-bold text-white mb-1">87.3%</h3>
+                        <p class="text-slate-400 text-sm">Taux de Réussite</p>
+                        <div class="mt-4 h-1 bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-amber-500 rounded-full" style="width: 87%"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Charts Row -->
+                <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 slide-in" style="animation-delay: 0.1s">
+                    <!-- Financial Chart -->
+                    <div class="lg:col-span-2 glass-panel rounded-2xl p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-white">Évolution Financière</h3>
+                            <div class="flex gap-2">
+                                <button class="px-3 py-1 rounded-lg text-xs bg-indigo-600 text-white border-none cursor-pointer">Mensuel</button>
+                                <button class="px-3 py-1 rounded-lg text-xs bg-slate-700 text-slate-300 border-none cursor-pointer hover:bg-slate-600 transition-colors">Trimestriel</button>
+                                <button class="px-3 py-1 rounded-lg text-xs bg-slate-700 text-slate-300 border-none cursor-pointer hover:bg-slate-600 transition-colors">Annuel</button>
+                            </div>
+                        </div>
+                        <canvas id="financeChart" height="250"></canvas>
+                    </div>
+
+                    <!-- Group Distribution -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-6">Répartition par Langue</h3>
+                        <canvas id="languageChart" height="250"></canvas>
+                        <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-indigo-500"></span>
+                                <span class="text-slate-400">Anglais (45%)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-purple-500"></span>
+                                <span class="text-slate-400">Français (25%)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                <span class="text-slate-400">Espagnol (20%)</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                                <span class="text-slate-400">Allemand (10%)</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Alerts Section -->
+                <section class="slide-in" style="animation-delay: 0.2s">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                            <i class="fas fa-exclamation-triangle text-amber-500"></i>
+                            Alertes Prioritaires
+                        </h3>
+                        <span class="badge badge-red">4 Nouvelles</span>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <!-- Alert 1: Impayés -->
+                        <div class="alert-critical rounded-xl p-4 flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                                    <i class="fas fa-euro-sign text-red-400 text-xl"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-white">Paiements en retard</h4>
+                                    <p class="text-sm text-slate-400">12 étudiants ont des impayés > 15 jours • Total: 8,450 €</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-slate-500">Il y a 2h</span>
+                                <button class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium transition-colors text-white border-none cursor-pointer">
+                                    Voir détails
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Alert 2: Absences -->
+                        <div class="alert-warning rounded-xl p-4 flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                    <i class="fas fa-user-times text-amber-400 text-xl"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-white">Absences récurrentes</h4>
+                                    <p class="text-sm text-slate-400">8 étudiants > 3 absences ce mois • Risque d'abandon</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-slate-500">Il y a 5h</span>
+                                <button class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm font-medium transition-colors text-white border-none cursor-pointer">
+                                    Contacter
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Alert 3: Effectifs faibles -->
+                        <div class="alert-info rounded-xl p-4 flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                    <i class="fas fa-users-slash text-blue-400 text-xl"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-white">Groupes sous-effectifs</h4>
+                                    <p class="text-sm text-slate-400">3 groupes ont moins de 5 étudiants • Rentabilité à risque</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-slate-500">Il y a 1j</span>
+                                <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors text-white border-none cursor-pointer">
+                                    Fusionner?
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Secondary Stats -->
+                <section class="grid grid-cols-1 md:grid-cols-3 gap-6 slide-in" style="animation-delay: 0.3s">
+                    <!-- Taux Abandon -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h4 class="text-sm font-medium text-slate-400 mb-4">Taux d'Abandon</h4>
+                        <div class="flex items-end justify-between">
+                            <div>
+                                <span class="text-3xl font-bold text-white">5.2%</span>
+                                <p class="text-xs text-emerald-400 mt-1"><i class="fas fa-arrow-down mr-1"></i>-1.3% vs trimestre dernier</p>
+                            </div>
+                            <div class="w-16 h-16 relative">
+                                <svg class="w-full h-full" style="transform: rotate(-90deg);">
+                                    <circle cx="32" cy="32" r="28" stroke="#334155" stroke-width="4" fill="none"/>
+                                    <circle cx="32" cy="32" r="28" stroke="#10b981" stroke-width="4" fill="none" stroke-dasharray="175.9" stroke-dashoffset="166.1"/>
+                                </svg>
+                                <span class="absolute inset-0 flex items-center justify-center text-xs font-bold text-emerald-400">94.8%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assiduité -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h4 class="text-sm font-medium text-slate-400 mb-4">Taux d'Assiduité</h4>
+                        <div class="flex items-end justify-between">
+                            <div>
+                                <span class="text-3xl font-bold text-white">91.7%</span>
+                                <p class="text-xs text-amber-400 mt-1"><i class="fas fa-arrow-down mr-1"></i>-0.8% ce mois</p>
+                            </div>
+                            <div class="w-16 h-16 relative">
+                                <svg class="w-full h-full" style="transform: rotate(-90deg);">
+                                    <circle cx="32" cy="32" r="28" stroke="#334155" stroke-width="4" fill="none"/>
+                                    <circle cx="32" cy="32" r="28" stroke="#f59e0b" stroke-width="4" fill="none" stroke-dasharray="175.9" stroke-dashoffset="14.6"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Solde -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h4 class="text-sm font-medium text-slate-400 mb-4">Solde Actuel</h4>
+                        <div class="flex items-end justify-between">
+                            <div>
+                                <span class="text-3xl font-bold text-emerald-400">+12,450 €</span>
+                                <p class="text-xs text-slate-400 mt-1">Revenus - Dépenses (Avril)</p>
+                            </div>
+                            <div class="flex flex-col items-end">
+                                <span class="text-xs text-slate-400">Dépenses: 32,830 €</span>
+                                <span class="text-xs text-emerald-400">Revenus: 45,280 €</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Quick Actions -->
+                <section class="glass-panel rounded-2xl p-6 slide-in" style="animation-delay: 0.4s">
+                    <h3 class="text-lg font-semibold text-white mb-4">Accès Rapide</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <button class="p-4 rounded-xl bg-slate-800 hover:bg-slate-700 transition-all group text-left border-none cursor-pointer">
+                            <i class="fas fa-user-plus text-2xl text-indigo-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                            <p class="text-sm font-medium text-white">Nouvel Étudiant</p>
+                        </button>
+                        <button class="p-4 rounded-xl bg-slate-800 hover:bg-slate-700 transition-all group text-left border-none cursor-pointer">
+                            <i class="fas fa-chalkboard-teacher text-2xl text-purple-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                            <p class="text-sm font-medium text-white">Nouvel Enseignant</p>
+                        </button>
+                        <button class="p-4 rounded-xl bg-slate-800 hover:bg-slate-700 transition-all group text-left border-none cursor-pointer">
+                            <i class="fas fa-plus-circle text-2xl text-emerald-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                            <p class="text-sm font-medium text-white">Nouveau Groupe</p>
+                        </button>
+                        <button class="p-4 rounded-xl bg-slate-800 hover:bg-slate-700 transition-all group text-left border-none cursor-pointer">
+                            <i class="fas fa-file-invoice-dollar text-2xl text-amber-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                            <p class="text-sm font-medium text-white">Générer Rapport</p>
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+  <script src="{% static 'js/dashboard_der.js' %}"></script>
+       
+   
+</body>
+</html>

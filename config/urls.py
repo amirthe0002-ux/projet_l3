@@ -27,6 +27,7 @@ from api.views import (
     parents_view,
     inscriptions_view,
     salaires_view,
+    finance_view,
 
     # Comptable (+ Secrétariat hérite)
     dashboard_comptable,
@@ -109,18 +110,19 @@ urlpatterns = [
     path('comptable/situation-financiere/',     situation_financiere_view, name='situation_financiere'),
 
 
-    path('dirigeant/',                   dashboard_dirigeant, name='dashboard_dirigeant'),
+    path('dashboard/dirigeant/',                   dashboard_dirigeant, name='dashboard_dirigeant'),
     path('dirigeant/parametres/',        parametres_view,     name='parametres'),
     path('dirigeant/audit/',             audit_view,          name='audit'),
     path('dirigeant/utilisateurs/',      utilisateurs_view,   name='utilisateurs'),
     path('dirigeant/rapports/',          rapports_view,       name='rapports'),
+     path('dirigeant/fiannce/',          finance_view,       name='finance'),
 
 
     path('dashboard/enseignant/',                  dashboard_ens,       name='dashboard_enseignant'),
     path('enseignant/groupes/',mes_groupes_view,           name='mes_groupes'),
     path('enseignant/notes/',            notes_view,                 name='notes'),
-    path('dashboard/enseignant/absences/',         absences_view,              name='absences'),
-    path('dashboard/enseignant/ressources/',       ressources_view,            name='ressources'),
+    path('enseignant/absences/',         absences_view,              name='absences'),
+    path('enseignant/ressources/',       ressources_view,            name='ressources'),
     path('enseignant/messagerie/',       messagerie_enseignant_view, name='messagerie_enseignant'),
     path('enseignant/evaluations/',      evaluations_view,           name='evaluations'),
 
@@ -130,7 +132,7 @@ urlpatterns = [
     path('etudiant/planning/',           mon_planning_view,   name='mon_planning'),
     path('etudiant/niveau/',             mon_niveau_view,     name='mon_niveau'),
     path('etudiant/ressources/',         mes_ressources_view, name='mes_ressources'),
-    path('etudiant/messagerie/',     messagerie_etudiant_view, name='messagerie_etudiant'),
+    path('messagerie/',     messagerie_etudiant_view, name='messagerie_etudiant'),
     
 
 

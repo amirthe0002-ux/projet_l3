@@ -1,54 +1,44 @@
 /**
  * notifications.js
  * Include this on EVERY page (base template).
+ * Connects to WebSocket, shows toast popups, updates badge.
  *
- * FIX: WebSocket URL now always points to the Django backend (port 8000),
- * not location.host — which was giving a mangled URL when opening HTML
- * files directly or via Live Server on a different port.
+ * Add to your base HTML:
+ *   <script src="{% static 'js/notifications.js' %}"></script>
+ *   <div id="notif-bell-container"></div>  ← wherever you want the bell icon
  */
 
 (function () {
     'use strict';
 
-    // ── CONFIG ───────────────────────────────────────────────────────────────
-    // Always connect to the Django dev server.
-    // In production set this to '' (empty string) so it uses the same host.
-    const DJANGO_HOST = window.DJANGO_HOST || '127.0.0.1:8000';
-    const API_URL     = `http://${DJANGO_HOST}/api`;
-
-    let ws             = null;
+    const API_URL = '/api';
+    let ws        = null;
     let reconnectTimer = null;
     let reconnectDelay = 3000;
 
-    // ── Auth ─────────────────────────────────────────────────────────────────
+    // ── Auth ────────────────────────────────────────────────────────────────
     function getToken() {
-        return (
-            localStorage.getItem('access') ||
-            sessionStorage.getItem('access') ||
-            localStorage.getItem('access_token') ||
-            sessionStorage.getItem('access_token') ||
-            null
-        );
+        return localStorage.getItem('access') || sessionStorage.getItem('access') ||
+               localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || null;
     }
 
-    // ── WebSocket connection ──────────────────────────────────────────────────
+    // ── WebSocket connection ─────────────────────────────────────────────────
     function connect() {
         const token = getToken();
         if (!token) return; // not logged in
 
-        // FIX: always use DJANGO_HOST, never location.host
-        // location.host gives wrong value when page is served from a different port
-        const proto = DJANGO_HOST.startsWith('localhost') || DJANGO_HOST.startsWith('127')
-            ? 'ws'
-            : 'wss';
-
-        const url = `${proto}://${DJANGO_HOST}/ws/notifications/?token=${token}`;
-        console.log('[Notif] Connecting to', url);
+        // Always connect to Django server (port 8000), NOT to the current page origin.
+        // This fixes the bug where opening the file via Live Server (port 5500)
+        // or any other dev server causes the WS URL to be wrong.
+        const proto    = location.protocol === 'https:' ? 'wss' : 'ws';
+        const djHost   = location.hostname; // just the hostname, no port
+        const djPort   = '8000';            // Django/Daphne port — change if different
+        const url      = `${proto}://${djHost}:${djPort}/ws/notifications/?token=${token}`;
 
         ws = new WebSocket(url);
 
         ws.onopen = () => {
-            reconnectDelay = 3000;
+            reconnectDelay = 3000; // reset backoff
             console.log('[Notif] WebSocket connected');
         };
 
@@ -60,30 +50,23 @@
         };
 
         ws.onclose = (event) => {
-            if (event.code === 4001) {
-                console.warn('[Notif] Auth failed (4001), not retrying');
-                return;
-            }
+            if (event.code === 4001) return; // auth failed, don't retry
             console.log('[Notif] WS closed, reconnecting in', reconnectDelay, 'ms');
-            clearTimeout(reconnectTimer);
             reconnectTimer = setTimeout(() => {
-                reconnectDelay = Math.min(reconnectDelay * 1.5, 30000);
+                reconnectDelay = Math.min(reconnectDelay * 1.5, 30000); // exponential backoff
                 connect();
             }, reconnectDelay);
         };
 
-        ws.onerror = (err) => {
-            console.error('[Notif] WS error', err);
-            ws.close();
-        };
+        ws.onerror = () => ws.close();
     }
 
-    // ── Handle incoming messages ──────────────────────────────────────────────
+    // ── Handle incoming messages ─────────────────────────────────────────────
     function handleMessage(data) {
         switch (data.type) {
             case 'notification':
                 showToastNotification(data);
-                updateBadge(null, '+1');
+                updateBadge(null, '+1'); // increment
                 addToDropdown(data);
                 break;
             case 'unread_count':
@@ -94,7 +77,7 @@
         }
     }
 
-    // ── Badge ─────────────────────────────────────────────────────────────────
+    // ── Badge ────────────────────────────────────────────────────────────────
     function updateBadge(count, mode = 'set') {
         const badge = document.getElementById('notif-badge');
         if (!badge) return;
@@ -107,14 +90,14 @@
         if (count === 0) {
             badge.style.display = 'none';
         } else {
-            badge.textContent   = count > 99 ? '99+' : count;
+            badge.textContent  = count > 99 ? '99+' : count;
             badge.style.display = 'flex';
             badge.classList.add('notif-badge-bump');
             setTimeout(() => badge.classList.remove('notif-badge-bump'), 400);
         }
     }
 
-    // ── Toast popup ───────────────────────────────────────────────────────────
+    // ── Toast popup ──────────────────────────────────────────────────────────
     function showToastNotification(data) {
         const typeColors = {
             'Note':     '#6366f1',
@@ -144,7 +127,8 @@
                 <div class="notif-toast-title">${escapeHtml(data.titre)}</div>
                 <div class="notif-toast-text">${escapeHtml(data.contenu)}</div>
             </div>
-            <button class="notif-toast-close" onclick="this.closest('.notif-toast').remove()">×</button>`;
+            <button class="notif-toast-close" onclick="this.closest('.notif-toast').remove()">×</button>
+        `;
         toast.style.setProperty('--notif-color', color);
 
         if (data.lien) {
@@ -156,6 +140,7 @@
             });
         }
 
+        // Stack toasts
         let container = document.getElementById('notif-toast-container');
         if (!container) {
             container = document.createElement('div');
@@ -164,26 +149,18 @@
         }
         container.appendChild(toast);
 
+        // Auto remove after 6s
         setTimeout(() => {
             toast.classList.add('notif-toast-out');
             setTimeout(() => toast.remove(), 400);
         }, 6000);
     }
 
-    // ── Bell icon + dropdown ──────────────────────────────────────────────────
+    // ── Bell icon + dropdown ─────────────────────────────────────────────────
     function injectBell() {
-        // FIX: the dashboard HTML had TWO elements with id="notif-bell-container"
-        // (one in sidebar, one in header). We inject into the FIRST one found
-        // and remove duplicates.
-        const containers = document.querySelectorAll('#notif-bell-container');
-        if (!containers.length) return;
+        const container = document.getElementById('notif-bell-container');
+        if (!container) return;
 
-        // Remove extra duplicates, keep only the first
-        for (let i = 1; i < containers.length; i++) {
-            containers[i].removeAttribute('id');
-        }
-
-        const container = containers[0];
         container.innerHTML = `
             <div class="notif-bell-wrap" id="notifBellWrap">
                 <button class="notif-bell-btn" id="notifBellBtn" onclick="toggleNotifDropdown()">
@@ -197,25 +174,31 @@
                 <div class="notif-dropdown" id="notifDropdown" style="display:none;">
                     <div class="notif-dropdown-header">
                         <h4>Notifications</h4>
-                        <button onclick="markAllRead()" class="notif-mark-all">Tout marquer lu</button>
+                        <button onclick="markAllRead()" class="notif-mark-all">
+                            Tout marquer lu
+                        </button>
                     </div>
                     <div class="notif-list" id="notifList">
-                        <div class="notif-loading"><span>Chargement...</span></div>
+                        <div class="notif-loading">
+                            <span>Chargement...</span>
+                        </div>
                     </div>
-                    <a href="/notifications/" class="notif-see-all">Voir toutes les notifications →</a>
+                    <a href="/notifications/" class="notif-see-all">
+                        Voir toutes les notifications →
+                    </a>
                 </div>
             </div>`;
 
+        // Close on outside click
         document.addEventListener('click', (e) => {
             const wrap = document.getElementById('notifBellWrap');
             if (wrap && !wrap.contains(e.target)) {
-                const dd = document.getElementById('notifDropdown');
-                if (dd) dd.style.display = 'none';
+                document.getElementById('notifDropdown').style.display = 'none';
             }
         });
     }
 
-    // ── Dropdown toggle ───────────────────────────────────────────────────────
+    // ── Dropdown toggle ──────────────────────────────────────────────────────
     window.toggleNotifDropdown = function () {
         const dd = document.getElementById('notifDropdown');
         if (!dd) return;
@@ -224,27 +207,29 @@
         if (!isOpen) loadRecentNotifications();
     };
 
-    // ── Add notification to dropdown ──────────────────────────────────────────
+    // ── Add notification to dropdown ─────────────────────────────────────────
     function addToDropdown(data) {
         const list = document.getElementById('notifList');
         if (!list) return;
+
+        // Remove "empty" message if present
         list.querySelector('.notif-empty')?.remove();
         list.querySelector('.notif-loading')?.remove();
 
         const item = buildNotifItem({
-            id:                  data.id,
-            titre:               data.titre,
-            contenu:             data.contenu,
-            type_notification:   data.notif_type,
-            urgent:              data.urgent,
-            lien_action:         data.lien,
-            date_creation:       data.date,
+            id:               data.id,
+            titre:            data.titre,
+            contenu:          data.contenu,
+            type_notification:data.notif_type,
+            urgent:           data.urgent,
+            lien_action:      data.lien,
+            date_creation:    data.date,
             statut_notification: 'Non_lu',
         });
         list.insertBefore(item, list.firstChild);
     }
 
-    // ── Load recent notifications from REST API ───────────────────────────────
+    // ── Load recent notifications from API ───────────────────────────────────
     async function loadRecentNotifications() {
         const list = document.getElementById('notifList');
         if (!list) return;
@@ -257,8 +242,8 @@
                     'Content-Type':  'application/json',
                 },
             });
-            if (!res.ok) throw new Error('API error ' + res.status);
-            const data   = await res.json();
+            if (!res.ok) throw new Error('API error');
+            const data = await res.json();
             const notifs = Array.isArray(data) ? data : (data.results || []);
 
             list.innerHTML = '';
@@ -270,8 +255,7 @@
 
             notifs.slice(0, 10).forEach(n => list.appendChild(buildNotifItem(n)));
 
-        } catch (err) {
-            console.error('[Notif] loadRecentNotifications error:', err);
+        } catch (_) {
             list.innerHTML = '<div class="notif-empty">Erreur de chargement</div>';
         }
     }
@@ -281,17 +265,15 @@
             'Note':'📝','Absence':'⚠️','Paiement':'💰',
             'Message':'✉️','Info':'ℹ️','Urgent':'🚨'
         };
-        const icon     = typeIcons[n.type_notification] || 'ℹ️';
+        const icon    = typeIcons[n.type_notification] || 'ℹ️';
         const isUnread = n.statut_notification === 'Non_lu';
-        const date     = n.date_creation
-            ? new Date(n.date_creation).toLocaleString('fr-FR', {
-                day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
-              })
+        const date    = n.date_creation
+            ? new Date(n.date_creation).toLocaleString('fr-FR', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
             : '';
 
         const item = document.createElement('div');
-        item.className    = `notif-item ${isUnread ? 'notif-unread' : ''}`;
-        item.dataset.id   = n.id;
+        item.className = `notif-item ${isUnread ? 'notif-unread' : ''}`;
+        item.dataset.id = n.id;
         item.innerHTML = `
             <div class="notif-item-icon ${n.urgent ? 'notif-urgent' : ''}">${icon}</div>
             <div class="notif-item-body">
@@ -299,7 +281,8 @@
                 <div class="notif-item-text">${escapeHtml(n.contenu)}</div>
                 <div class="notif-item-date">${date}</div>
             </div>
-            ${isUnread ? `<button class="notif-read-btn" onclick="markOneRead(${n.id}, this)" title="Marquer lu">✓</button>` : ''}`;
+            ${isUnread ? `<button class="notif-read-btn" onclick="markOneRead(${n.id}, this)" title="Marquer lu">✓</button>` : ''}
+        `;
 
         if (n.lien_action) {
             item.style.cursor = 'pointer';
@@ -314,16 +297,18 @@
         return item;
     }
 
-    // ── Mark read ─────────────────────────────────────────────────────────────
+    // ── Mark read ────────────────────────────────────────────────────────────
     window.markOneRead = function (id, btn) {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ action: 'mark_read', id }));
         } else {
+            // Fallback to REST API
             fetch(`${API_URL}/notifications/${id}/lire/`, {
-                method:  'POST',
+                method: 'POST',
                 headers: { 'Authorization': `Bearer ${getToken()}` },
             });
         }
+        // Remove unread style immediately
         const item = document.querySelector(`.notif-item[data-id="${id}"]`);
         if (item) {
             item.classList.remove('notif-unread');
@@ -343,24 +328,23 @@
         updateBadge(0);
     };
 
-    // ── Utility ───────────────────────────────────────────────────────────────
+    // ── Utility ──────────────────────────────────────────────────────────────
     function escapeHtml(str) {
         if (!str) return '';
-        return str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
-    // ── Inject CSS ────────────────────────────────────────────────────────────
+    // ── Inject CSS ───────────────────────────────────────────────────────────
     function injectStyles() {
         if (document.getElementById('notif-styles')) return;
         const s = document.createElement('style');
         s.id = 'notif-styles';
         s.textContent = `
+        /* ── Toast container ── */
         #notif-toast-container {
             position:fixed; bottom:24px; right:24px; z-index:99999;
-            display:flex; flex-direction:column; gap:10px; pointer-events:none;
+            display:flex; flex-direction:column; gap:10px;
+            pointer-events:none;
         }
         .notif-toast {
             display:flex; align-items:flex-start; gap:12px;
@@ -382,6 +366,8 @@
             font-size:1.2rem; padding:0; line-height:1; flex-shrink:0;
         }
         .notif-toast-close:hover { color:#374151; }
+
+        /* ── Bell button ── */
         .notif-bell-wrap { position:relative; display:inline-block; }
         .notif-bell-btn {
             background:none; border:none; cursor:pointer; padding:8px;
@@ -397,10 +383,13 @@
             border:2px solid #fff;
         }
         @keyframes notif-badge-bump {
-            0%,100% { transform:scale(1); }
-            50%      { transform:scale(1.4); }
+            0%   { transform:scale(1); }
+            50%  { transform:scale(1.4); }
+            100% { transform:scale(1); }
         }
         .notif-badge-bump { animation:notif-badge-bump .3s ease; }
+
+        /* ── Dropdown ── */
         .notif-dropdown {
             position:absolute; top:calc(100% + 8px); right:0;
             width:340px; background:#fff; border-radius:16px;
@@ -411,7 +400,9 @@
             display:flex; justify-content:space-between; align-items:center;
             padding:14px 16px; border-bottom:1px solid #f1f5f9;
         }
-        .notif-dropdown-header h4 { margin:0; font-size:.95rem; font-weight:700; color:#1e293b; }
+        .notif-dropdown-header h4 {
+            margin:0; font-size:.95rem; font-weight:700; color:#1e293b;
+        }
         .notif-mark-all {
             background:none; border:none; color:#6366f1; font-size:.8rem;
             cursor:pointer; font-weight:600; padding:0;
@@ -440,12 +431,12 @@
             font-size:.85rem; font-weight:600; color:#1e293b;
             white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
         }
-        .notif-item-text {
+        .notif-item-text  {
             font-size:.78rem; color:#64748b; margin-top:2px;
             display:-webkit-box; -webkit-line-clamp:2;
             -webkit-box-orient:vertical; overflow:hidden;
         }
-        .notif-item-date { font-size:.72rem; color:#94a3b8; margin-top:4px; }
+        .notif-item-date  { font-size:.72rem; color:#94a3b8; margin-top:4px; }
         .notif-read-btn {
             background:none; border:none; color:#6366f1; cursor:pointer;
             font-size:.9rem; padding:4px; flex-shrink:0;
@@ -459,6 +450,8 @@
             transition:background .15s;
         }
         .notif-see-all:hover { background:#f5f3ff; }
+
+        /* ── Animations ── */
         @keyframes notifSlideIn {
             from { opacity:0; transform:translateX(40px) scale(.95); }
             to   { opacity:1; transform:translateX(0)   scale(1); }
@@ -474,7 +467,7 @@
         document.head.appendChild(s);
     }
 
-    // ── Keepalive ping every 25s ──────────────────────────────────────────────
+    // ── Keepalive ping every 25s ─────────────────────────────────────────────
     function startPing() {
         setInterval(() => {
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -483,7 +476,7 @@
         }, 25000);
     }
 
-    // ── Init ──────────────────────────────────────────────────────────────────
+    // ── Init ─────────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', () => {
         injectStyles();
         injectBell();

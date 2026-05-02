@@ -1,0 +1,266 @@
+
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ressources Pédagogiques - Enseignant</title>
+    <link rel="stylesheet" href="{% static 'css/ressources.css' %}">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+<script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=X13nkhzOBhbbRqa-B8lse9MOzeaIUJhWUGTiVaMyQO_mZ5P-7bnoqqmZCGJCwzzlmCYglObXQSSOWCeJvhA8lG0BmdzLSVEQM8Vs_am0g7UpVBpP_rMk4_4P8esE1kzow2mHfsVA21fD1rNOx090n9fdLwWU7iflY66hzl974jGk9XomRA4pXx5JBhRNhNuDJkuICyNBum7-WeaTu5yzrcjG7cmMTgzu6ZiTPBOoUJhndbfwPsjN7si-uF4ojBpZU4GuA4hQQLU_gjMjDD_jog" charset="UTF-8"></script><link rel="stylesheet" crossorigin="anonymous" href="https://gc.kis.v2.scr.kaspersky-labs.com/E3E8934C-235A-4B0E-825A-35A08381A191/abn/main.css?attr=aHR0cHM6Ly9jZG4uZGlzY29yZGFwcC5jb20vYXR0YWNobWVudHMvMTQ3NzA3OTY0ODU0MTA4NTcwMS8xNDk3MzcwNTA3MjcwNDIyNzI4L3Jlc3NvdXJjZXMuaHRtbD9leD02OWVkNDY3NCZpcz02OWViZjRmNCZobT0zZmQ2YmRiMTZiOWE3YjM1NDhiZDVmZmUxMGIzYTQwMGIxNWMwNGRjOGUyMWYxM2RjM2E3OTE5MTU4Y2Q0MDIyJg"/></head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-title">
+                <h1>📚 Ressources Pédagogiques</h1>
+                <p>Gérez et partagez vos supports de cours</p>
+            </div>
+            <button class="upload-btn">
+                <span>⬆️</span>
+                Nouvelle Ressource
+            </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-icon blue">📄</div>
+                <div class="stat-content">
+                    <h4>45</h4>
+                    <p>Documents PDF</p>
+                </div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-icon orange">🎥</div>
+                <div class="stat-content">
+                    <h4>12</h4>
+                    <p>Vidéos</p>
+                </div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-icon purple">🎵</div>
+                <div class="stat-content">
+                    <h4>28</h4>
+                    <p>Fichiers Audio</p>
+                </div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-icon green">📊</div>
+                <div class="stat-content">
+                    <h4>156</h4>
+                    <p>Téléchargements</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters-section">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" placeholder="Rechercher une ressource...">
+            </div>
+            <div class="filter-tabs">
+                <button class="tab-btn active">Tous</button>
+                <button class="tab-btn">Documents</button>
+                <button class="tab-btn">Vidéos</button>
+                <button class="tab-btn">Audio</button>
+                <button class="tab-btn">Exercices</button>
+            </div>
+        </div>
+
+        <!-- Upload Area -->
+        <div class="upload-area">
+            <div class="upload-icon">📤</div>
+            <h3>Glissez-déposez vos fichiers ici</h3>
+            <p>ou cliquez pour parcourir votre ordinateur</p>
+            <div class="file-types">
+                <span class="file-type">📄 PDF</span>
+                <span class="file-type">🎥 MP4</span>
+                <span class="file-type">🎵 MP3</span>
+                <span class="file-type">📝 DOC</span>
+                <span class="file-type">📊 PPT</span>
+            </div>
+        </div>
+
+        <!-- Resources Grid -->
+        <div class="resources-grid">
+            <!-- Resource 1 -->
+            <div class="resource-card">
+                <div class="resource-preview pdf">
+                    <span class="file-icon">📄</span>
+                    <span class="file-type-badge">PDF</span>
+                </div>
+                <div class="resource-content">
+                    <div class="resource-meta">
+                        <span>📅 20 Mars 2026</span>
+                        <span>💾 2.4 MB</span>
+                    </div>
+                    <h3 class="resource-title">Guide Complet Grammaire Anglaise Niveau A2</h3>
+                    <p class="resource-desc">Document complet couvrant tous les points de grammaire du niveau A2 avec exercices corrigés.</p>
+                    <div class="resource-tags">
+                        <span class="tag anglais">Anglais</span>
+                        <span class="tag a2">A2</span>
+                        <span class="tag grammaire">Grammaire</span>
+                    </div>
+                    <div class="resource-footer">
+                        <span class="download-count">⬇️ 45 téléchargements</span>
+                        <div class="resource-actions">
+                            <button class="btn-icon">⬇️</button>
+                            <button class="btn-icon">✏️</button>
+                            <button class="btn-icon">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource 2 -->
+            <div class="resource-card">
+                <div class="resource-preview video">
+                    <span class="file-icon">🎥</span>
+                    <span class="file-type-badge">Vidéo</span>
+                </div>
+                <div class="resource-content">
+                    <div class="resource-meta">
+                        <span>📅 18 Mars 2026</span>
+                        <span>💾 156 MB</span>
+                    </div>
+                    <h3 class="resource-title">Cours Vidéo: Prononciation des Sons Anglais</h3>
+                    <p class="resource-desc">Vidéo interactive pour maîtriser la prononciation des sons difficiles en anglais.</p>
+                    <div class="resource-tags">
+                        <span class="tag anglais">Anglais</span>
+                        <span class="tag">B1</span>
+                        <span class="tag" style="background: #ffedd5; color: #9a3412;">Oral</span>
+                    </div>
+                    <div class="resource-footer">
+                        <span class="download-count">⬇️ 89 téléchargements</span>
+                        <div class="resource-actions">
+                            <button class="btn-icon">⬇️</button>
+                            <button class="btn-icon">✏️</button>
+                            <button class="btn-icon">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource 3 -->
+            <div class="resource-card">
+                <div class="resource-preview audio">
+                    <span class="file-icon">🎵</span>
+                    <span class="file-type-badge">Audio</span>
+                </div>
+                <div class="resource-content">
+                    <div class="resource-meta">
+                        <span>📅 15 Mars 2026</span>
+                        <span>💾 12 MB</span>
+                    </div>
+                    <h3 class="resource-title">Listening Practice: Conversations Quotidiennes</h3>
+                    <p class="resource-desc">Exercices de compréhension orale avec dialogues de la vie quotidienne.</p>
+                    <div class="resource-tags">
+                        <span class="tag anglais">Anglais</span>
+                        <span class="tag a2">A2</span>
+                        <span class="tag" style="background: #f3e8ff; color: #7c3aed;">Listening</span>
+                    </div>
+                    <div class="resource-footer">
+                        <span class="download-count">⬇️ 67 téléchargements</span>
+                        <div class="resource-actions">
+                            <button class="btn-icon">⬇️</button>
+                            <button class="btn-icon">✏️</button>
+                            <button class="btn-icon">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource 4 -->
+            <div class="resource-card">
+                <div class="resource-preview doc">
+                    <span class="file-icon">📝</span>
+                    <span class="file-type-badge">Exercice</span>
+                </div>
+                <div class="resource-content">
+                    <div class="resource-meta">
+                        <span>📅 12 Mars 2026</span>
+                        <span>💾 845 KB</span>
+                    </div>
+                    <h3 class="resource-title">Fiche d'Exercices: Les Temps du Passé</h3>
+                    <p class="resource-desc">Exercices pratiques sur le Past Simple, Present Perfect et Past Continuous.</p>
+                    <div class="resource-tags">
+                        <span class="tag anglais">Anglais</span>
+                        <span class="tag">B1</span>
+                        <span class="tag grammaire">Grammaire</span>
+                    </div>
+                    <div class="resource-footer">
+                        <span class="download-count">⬇️ 34 téléchargements</span>
+                        <div class="resource-actions">
+                            <button class="btn-icon">⬇️</button>
+                            <button class="btn-icon">✏️</button>
+                            <button class="btn-icon">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource 5 -->
+            <div class="resource-card">
+                <div class="resource-preview" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                    <span class="file-icon">📊</span>
+                    <span class="file-type-badge">Présentation</span>
+                </div>
+                <div class="resource-content">
+                    <div class="resource-meta">
+                        <span>📅 10 Mars 2026</span>
+                        <span>💾 5.2 MB</span>
+                    </div>
+                    <h3 class="resource-title">Présentation: Vocabulaire du Travail</h3>
+                    <p class="resource-desc">PowerPoint complet sur le vocabulaire professionnel et les entretiens d'embauche.</p>
+                    <div class="resource-tags">
+                        <span class="tag anglais">Anglais</span>
+                        <span class="tag">B2</span>
+                        <span class="tag" style="background: #d1fae5; color: #166534;">Vocabulaire</span>
+                    </div>
+                    <div class="resource-footer">
+                        <span class="download-count">⬇️ 23 téléchargements</span>
+                        <div class="resource-actions">
+                            <button class="btn-icon">⬇️</button>
+                            <button class="btn-icon">✏️</button>
+                            <button class="btn-icon">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource 6 -->
+            <div class="resource-card">
+                <div class="resource-preview pdf">
+                    <span class="file-icon">📄</span>
+                    <span class="file-type-badge">PDF</span>
+                </div>
+                <div class="resource-content">
+                    <div class="resource-meta">
+                        <span>📅 08 Mars 2026</span>
+                        <span>💾 1.8 MB</span>
+                    </div>
+                    <h3 class="resource-title">Test d'Évaluation Finale Niveau A2</h3>
+                    <p class="resource-desc">Examen complet pour évaluer le niveau A2 avec corrigé détaillé.</p>
+                    <div class="resource-tags">
+                        <span class="tag anglais">Anglais</span>
+                        <span class="tag a2">A2</span>
+                        <span class="tag" style="background: #fee2e2; color: #991b1b;">Évaluation</span>
+                    </div>
+                    <div class="resource-footer">
+                        <span class="download-count">⬇️ 12 téléchargements</span>
+                        <div class="resource-actions">
+                            <button class="btn-icon">⬇️</button>
+                            <button class="btn-icon">✏️</button>
+                            <button class="btn-icon">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/ressources.js' %}"></script>
+</body>
+</html>

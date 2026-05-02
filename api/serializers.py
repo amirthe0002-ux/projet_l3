@@ -27,7 +27,8 @@ class UtilisateurSerializer(serializers.ModelSerializer):
             'id', 'email', 'first_name', 'last_name', 'nom_complet',
             'telephone', 'adresse', 'wilaya', 'role', 'statut',
             'permission_2fa', 'compte_verrouille',
-            'date_inscription', 'derniere_connexion',
+            'date_inscription', 'derniere_connexion',   'compte_verrouille',      # ← ADD
+            'tentatives_echouees',    # ← ADD
         ]
         read_only_fields = ['id', 'date_inscription']
 
@@ -779,7 +780,7 @@ class ParametreSystemeSerializer(serializers.ModelSerializer):
             'description', 'modifiable', 'date_modification',
         ]
         read_only_fields = ['id', 'nom_parametre', 'type', 'description', 'date_modification']
-
+    
 
 # ============================================================
 # AUDIT

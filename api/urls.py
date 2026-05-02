@@ -139,7 +139,11 @@ urlpatterns = [
     # ============================================================
     # UTILISATEUR DETAIL (admin field updates)
     # ============================================================
-    path('utilisateurs/<int:pk>/', views.UtilisateurDetailView.as_view()),
+   # ADD this line — it's missing entirely
+path('utilisateurs/', views.UtilisateurListView.as_view(), name='utilisateur_list'),
+
+# This one already exists — keep it
+path('utilisateurs/<int:pk>/', views.UtilisateurDetailView.as_view()),
    
 ]
 

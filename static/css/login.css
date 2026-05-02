@@ -88,7 +88,7 @@ body {
     padding: 60px;
     transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
     transform-origin: left center;
-    min-width: 0; /* FIX: allows grid to collapse properly */
+    min-width: 0;
 }
 
 .split-left::before {
@@ -107,7 +107,6 @@ body {
     opacity: 0;
     padding: 0;
     overflow: hidden;
-    /* REMOVED: width: 0 - let grid handle sizing via 0fr */
 }
 
 .left-content {
@@ -324,7 +323,7 @@ body {
     justify-content: center;
     padding: 40px;
     transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-    min-width: 0; /* FIX: allows grid to expand properly */
+    min-width: 0;
 }
 
 .split-right::before {
@@ -339,8 +338,6 @@ body {
 
 /* Expand to full screen - FIXED */
 .split-right.expand-full {
-    /* REMOVED: grid-column: 1 / -1 - was causing white screen! */
-    /* Grid already handles layout via 0fr 1fr, no need to span */
     background: linear-gradient(135deg, #050505 0%, #0a0a1a 25%, #1a1a2e 50%, #0a0a1a 75%, #050505 100%);
     background-size: 200% 200%;
     animation: gradientShift 15s ease infinite;
@@ -990,12 +987,52 @@ form {
     to { transform: rotate(360deg); }
 }
 
-/* Security Info */
-.security-info {
+/* Signup Link */
+.signup-link {
     text-align: center;
     margin-top: 20px;
     padding-top: 20px;
     border-top: 1px solid var(--glass-border);
+    position: relative;
+    z-index: 1;
+}
+
+.signup-link p {
+    font-size: 13px;
+    color: var(--gray-400);
+}
+
+.signup-link a {
+    color: var(--primary-light);
+    text-decoration: none;
+    font-weight: 600;
+    transition: all var(--transition-base);
+    position: relative;
+}
+
+.signup-link a::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 1px;
+    background: linear-gradient(90deg, var(--primary-light), var(--secondary-light));
+    transition: width var(--transition-base);
+}
+
+.signup-link a:hover {
+    color: var(--white);
+}
+
+.signup-link a:hover::after {
+    width: 100%;
+}
+
+/* Security Info */
+.security-info {
+    text-align: center;
+    margin-top: 16px;
     position: relative;
     z-index: 1;
 }
@@ -1082,8 +1119,6 @@ form {
     .split-right {
         padding: 20px;
     }
-
-    /* REMOVED: .split-right.expand-full grid-column rule was here - not needed */
 
     .right-initial {
         padding: 20px;
