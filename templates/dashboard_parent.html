@@ -4,96 +4,327 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tableau de Bord - Parent</title>
-
+    <title>Tableau de Bord Parent — LanguePro</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="{% static 'css/dashbord_parent.css' %}">
-<script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=tzHov-6mAuIZ9tLpjuJO2075kQaa9DIPmmeFt0bL1bW6s2Rh74fCW5JyhF1ru-81c_p5wven13ngZYlqS9c3lgfvr7VoZR3Afj0zCdLjg1UXyjW4U3rrAsJI_o4L3q_e16Y-hsZf87_3_9WaKMUARXz-dyMU3ZIFyAihdUbYNJOb2vJI5w5bODxfbj5Zj8mmcrnddCBsYUjkjFtms-Yo7ryerFLXWR12FQDyf_yPOBoL8I3mWjY8OD1tUv1-awaIygIaPHxDcpYCs2KpEwvNKdYba4sldxKkJZUjKN1R90Y" charset="UTF-8"></script><link rel="stylesheet" crossorigin="anonymous" href="https://gc.kis.v2.scr.kaspersky-labs.com/E3E8934C-235A-4B0E-825A-35A08381A191/abn/main.css?attr=aHR0cHM6Ly9jZG4uZGlzY29yZGFwcC5jb20vYXR0YWNobWVudHMvMTQ3NzA3OTY0ODU0MTA4NTcwMS8xNDk2MjA2NzI4NTU0MDkwNTE2L2Rhc2hib2FyZF9wYXJlbnQuaHRtbD9leD02OWU5MGE5YSZpcz02OWU3YjkxYSZobT1jYzQ4YzY1NDNmNjA3MmI1MzE2YTUxNmEzODFjMDk5YzFjOTkxMGY5YjRiYmE3NDZkNzQ0YTA1YTZiN2E4OGEyJg"/></head>
+</head>
 <body>
-    <div class="layout">
-        <aside class="sidebar">
-            <div class="logo">
-                <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
-                <div>
-                    <div class="logo-title">LanguePro</div>
-                    <div class="logo-subtitle">Espace Parent</div>
-                </div>
-            </div>
-            <div class="parent-profile">
-                <div class="parent-avatar">MP</div>
-                <div>
-                    <div class="parent-name">M. Parent</div>
-                    <div class="parent-email">parent@email.com</div>
-                </div>
-            </div>
-            <nav class="nav">
-                <a href="{% url 'dashboard_parent' %}"  class="nav-item active"><i class="fas fa-chart-line"></i><span>Tableau de Bord</span></a>
-                <a href="{% url 'suivi_enfant' %}" class="nav-item "><i class="fas fa-chart-line"></i><span>Suivi Enfant</span></a>
-                <a href="{% url 'messagerie_parent' %}"  class="nav-item"><i class="fas fa-star"></i><span>Messagerie</span></a>
-               <a href="{% url 'mes_ressourcess' %}"  class="nav-item"><i class="fas fa-chart-line"></i><span>Ressources</span></a>
-                <a href="#" class="nav-item" id="logoutLink">
-                <i class="fas fa-sign-out-alt"></i><span>Déconnexion</span>
-        </aside>
+<div class="layout">
 
-        <main class="main">
-            <header class="header">
+    <!-- ══════════════ SIDEBAR ══════════════ -->
+    <aside class="sidebar">
+        <!-- Logo -->
+        <div class="logo">
+            <div class="logo-icon">
+                <i class="fas fa-graduation-cap"></i>
+            </div>
+            <div>
+                <div class="logo-title">LanguePro</div>
+                <div class="logo-subtitle">Espace Parent</div>
+            </div>
+        </div>
+
+        <!-- Parent Profile -->
+        <div class="parent-profile">
+            <div class="parent-avatar" id="parentAvatar">MP</div>
+            <div>
+                <div class="parent-name"  id="parentName">M. Parent</div>
+                <div class="parent-email" id="parentEmail">parent@email.com</div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="nav">
+            <a href="{% url 'dashboard_parent' %}" class="nav-item active">
+                <i class="fas fa-chart-line"></i>
+                <span>Tableau de Bord</span>
+            </a>
+            <a href="{% url 'suivi_enfant' %}" class="nav-item">
+                <i class="fas fa-user-graduate"></i>
+                <span>Suivi Enfant</span>
+            </a>
+            <a href="{% url 'messagerie_parent' %}" class="nav-item">
+                <i class="fas fa-comments"></i>
+                <span>Messagerie</span>
+                <span id="msgBadgeNav" style="display:none;margin-left:auto;background:#ef4444;
+                    color:#fff;font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:20px;">0</span>
+            </a>
+            <a href="{% url 'mes_ressourcess' %}" class="nav-item">
+                <i class="fas fa-book-open"></i>
+                <span>Ressources</span>
+            </a>
+            <a href="#" class="nav-item" id="logoutLink" style="margin-top:auto;">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Déconnexion</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!-- ══════════════ MAIN ══════════════ -->
+    <main class="main">
+
+        <!-- Header -->
+        <header class="header">
+            <div>
                 <h1>Tableau de Bord</h1>
+                <p style="color:#94a3b8;font-size:.9rem;margin-top:.25rem;" id="headerDate">
+                    Chargement...
+                </p>
+            </div>
+            <div style="display:flex;align-items:center;gap:1rem;">
+                <!-- Notification bell (injected by notifications.js) -->
                 <div id="notif-bell-container"></div>
-            </header>
-
-            <div class="children-tabs">
-                <button class="child-tab active">
-                    <div class="child-avatar" style="background: linear-gradient(135deg, #3b82f6, #06b6d4);">AS</div>
-                    <div>
-                        <div class="child-name">Ali Saoudi</div>
-                        <div class="child-level">Niveau B1</div>
-                    </div>
-                </button>
-                <button class="child-tab">
-                    <div class="child-avatar" style="background: linear-gradient(135deg, #ec4899, #f472b6);">SA</div>
-                    <div>
-                        <div class="child-name">Sara Saoudi</div>
-                        <div class="child-level">Niveau A2</div>
-                    </div>
-                </button>
             </div>
+        </header>
 
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon blue"><i class="fas fa-star"></i></div>
-                    <div class="stat-content">
-                        <h3>Moyenne Générale</h3>
-                        <p class="stat-value">14.5</p>
-                        <p class="stat-change up">+1.2 ce trimestre</p>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon green"><i class="fas fa-layer-group"></i></div>
-                    <div class="stat-content">
-                        <h3>Niveau Actuel</h3>
-                        <p class="stat-value">B1</p>
-                        <p class="stat-change">Progression normale</p>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon orange"><i class="fas fa-user-check"></i></div>
-                    <div class="stat-content">
-                        <h3>Assiduité</h3>
-                        <p class="stat-value">92%</p>
-                        <p class="stat-change">2 absences ce mois</p>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon purple"><i class="fas fa-trophy"></i></div>
-                    <div class="stat-content">
-                        <h3>Classement</h3>
-                        <p class="stat-value">3ème</p>
-                        <p class="stat-change">Sur 12 élèves</p>
-                    </div>
+        <!-- ── Children Tabs ── -->
+        <div class="children-tabs" id="childrenTabs">
+            <!-- Filled by JS -->
+            <div style="color:#94a3b8;font-size:.9rem;padding:.5rem;">
+                <i class="fas fa-spinner fa-spin"></i> Chargement des enfants...
+            </div>
+        </div>
+
+        <!-- ── KPI Stats Grid ── -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-icon blue"><i class="fas fa-star"></i></div>
+                <div class="stat-content">
+                    <h3>Moyenne Générale</h3>
+                    <p class="stat-value" id="statMoyenne">—</p>
+                    <p class="stat-change" id="statMoyenneChange">Chargement...</p>
                 </div>
             </div>
-        </main>
-    </div>
-</body>
+            <div class="stat-card">
+                <div class="stat-icon green"><i class="fas fa-layer-group"></i></div>
+                <div class="stat-content">
+                    <h3>Niveau Actuel</h3>
+                    <p class="stat-value" id="statNiveau">—</p>
+                    <p class="stat-change" id="statNiveauChange">Progression normale</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon orange"><i class="fas fa-user-check"></i></div>
+                <div class="stat-content">
+                    <h3>Assiduité</h3>
+                    <p class="stat-value" id="statAssiduite">—</p>
+                    <p class="stat-change" id="statAbsences">Chargement...</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon purple"><i class="fas fa-trophy"></i></div>
+                <div class="stat-content">
+                    <h3>Paiement</h3>
+                    <p class="stat-value" id="statPaiement">—</p>
+                    <p class="stat-change" id="statPaiementChange">Chargement...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Second row: Notes + Absences ── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;"
+             id="detailsRow">
+
+            <!-- Dernières Notes -->
+            <div style="background:var(--glass-bg);backdrop-filter:blur(20px);
+                        border:1px solid var(--glass-border);border-radius:var(--radius-lg);
+                        padding:1.75rem;box-shadow:var(--glass-shadow);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+                    <h3 style="font-size:1rem;font-weight:700;color:#e2e8f0;display:flex;align-items:center;gap:.6rem;">
+                        <span style="background:linear-gradient(135deg,#3b82f6,#06b6d4);width:32px;height:32px;
+                            border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;">
+                            📝
+                        </span>
+                        Dernières Notes
+                    </h3>
+                    <a href="{% url 'suivi_enfant' %}" style="color:#818cf8;font-size:.8rem;text-decoration:none;font-weight:600;">
+                        Voir tout →
+                    </a>
+                </div>
+                <div id="notesContainer">
+                    <div style="text-align:center;padding:2rem;color:#64748b;">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Absences Récentes -->
+            <div style="background:var(--glass-bg);backdrop-filter:blur(20px);
+                        border:1px solid var(--glass-border);border-radius:var(--radius-lg);
+                        padding:1.75rem;box-shadow:var(--glass-shadow);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+                    <h3 style="font-size:1rem;font-weight:700;color:#e2e8f0;display:flex;align-items:center;gap:.6rem;">
+                        <span style="background:linear-gradient(135deg,#f59e0b,#f97316);width:32px;height:32px;
+                            border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;">
+                            📅
+                        </span>
+                        Absences Récentes
+                    </h3>
+                    <span id="absTotal" style="background:rgba(239,68,68,.15);color:#f87171;
+                        padding:3px 10px;border-radius:20px;font-size:.78rem;font-weight:700;">
+                        0 abs.
+                    </span>
+                </div>
+                <div id="absencesContainer">
+                    <div style="text-align:center;padding:2rem;color:#64748b;">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Third row: Planning + Messages ── -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;">
+
+            <!-- Planning de la semaine -->
+            <div style="background:var(--glass-bg);backdrop-filter:blur(20px);
+                        border:1px solid var(--glass-border);border-radius:var(--radius-lg);
+                        padding:1.75rem;box-shadow:var(--glass-shadow);">
+                <h3 style="font-size:1rem;font-weight:700;color:#e2e8f0;margin-bottom:1.25rem;
+                           display:flex;align-items:center;gap:.6rem;">
+                    <span style="background:linear-gradient(135deg,#10b981,#34d399);width:32px;height:32px;
+                        border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;">
+                        📆
+                    </span>
+                    Planning de la Semaine
+                </h3>
+                <div id="planningContainer">
+                    <div style="text-align:center;padding:2rem;color:#64748b;">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages Récents -->
+            <div style="background:var(--glass-bg);backdrop-filter:blur(20px);
+                        border:1px solid var(--glass-border);border-radius:var(--radius-lg);
+                        padding:1.75rem;box-shadow:var(--glass-shadow);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+                    <h3 style="font-size:1rem;font-weight:700;color:#e2e8f0;display:flex;align-items:center;gap:.6rem;">
+                        <span style="background:linear-gradient(135deg,#8b5cf6,#a78bfa);width:32px;height:32px;
+                            border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;">
+                            ✉️
+                        </span>
+                        Messages Récents
+                    </h3>
+                    <a href="{% url 'messagerie_parent' %}" style="color:#818cf8;font-size:.8rem;text-decoration:none;font-weight:600;">
+                        Messagerie →
+                    </a>
+                </div>
+                <div id="messagesContainer">
+                    <div style="text-align:center;padding:2rem;color:#64748b;">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Progression CEFR ── -->
+        <div style="background:var(--glass-bg);backdrop-filter:blur(20px);
+                    border:1px solid var(--glass-border);border-radius:var(--radius-lg);
+                    padding:1.75rem;box-shadow:var(--glass-shadow);margin-top:1.5rem;">
+            <h3 style="font-size:1rem;font-weight:700;color:#e2e8f0;margin-bottom:1.5rem;
+                       display:flex;align-items:center;gap:.6rem;">
+                <span style="background:linear-gradient(135deg,#6366f1,#8b5cf6);width:32px;height:32px;
+                    border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;">
+                    🎯
+                </span>
+                Progression CEFR
+            </h3>
+            <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;" id="cefrBar">
+                {% for lvl in 'A1,A2,B1,B2,C1,C2'|cut:' '|ljust:'17' %}{% endfor %}
+                <!-- Filled by JS -->
+                <div style="color:#64748b;font-size:.875rem;">
+                    <i class="fas fa-spinner fa-spin"></i> Chargement du niveau...
+                </div>
+            </div>
+        </div>
+
+    </main><!-- /main -->
+</div><!-- /layout -->
+
+<!-- ══════════════ JS ══════════════ -->
 <script src="{% static 'js/notifications.js' %}"></script>
- <script src="{% static 'js/dashboard_parent.js' %}"></script>
+<script src="{% static 'js/dashboard_parent.js' %}"></script>
+
+<script>
+/* ── Extra inline styles not in CSS ── */
+const _s = document.createElement('style');
+_s.textContent = `
+    .note-row {
+        display:flex;align-items:center;justify-content:space-between;
+        padding:.65rem .9rem;border-radius:10px;margin-bottom:.5rem;
+        background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+        transition:all .2s;
+    }
+    .note-row:hover { background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.25); }
+    .note-pill {
+        padding:3px 12px;border-radius:20px;font-weight:700;font-size:.82rem;
+    }
+    .note-good  { background:rgba(16,185,129,.15);color:#34d399; }
+    .note-mid   { background:rgba(59,130,246,.15);color:#60a5fa; }
+    .note-low   { background:rgba(239,68,68,.15);color:#f87171; }
+    .absence-row {
+        display:flex;align-items:center;justify-content:space-between;
+        padding:.65rem .9rem;border-radius:10px;margin-bottom:.5rem;
+        background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.12);
+    }
+    .planning-row {
+        display:flex;align-items:center;gap:.75rem;padding:.65rem .9rem;
+        border-radius:10px;margin-bottom:.5rem;
+        background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.12);
+    }
+    .planning-day {
+        background:linear-gradient(135deg,#10b981,#34d399);color:#fff;
+        font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:6px;
+        min-width:36px;text-align:center;
+    }
+    .msg-row {
+        display:flex;align-items:flex-start;gap:.75rem;padding:.65rem .9rem;
+        border-radius:10px;margin-bottom:.5rem;
+        background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+        cursor:pointer;transition:all .2s;
+    }
+    .msg-row:hover { background:rgba(99,102,241,.1); }
+    .msg-avatar {
+        width:36px;height:36px;border-radius:50%;flex-shrink:0;
+        background:linear-gradient(135deg,#8b5cf6,#a78bfa);
+        display:flex;align-items:center;justify-content:center;
+        font-weight:700;font-size:.8rem;color:#fff;
+    }
+    .cefr-step {
+        display:flex;flex-direction:column;align-items:center;gap:.4rem;flex:1;
+    }
+    .cefr-circle {
+        width:52px;height:52px;border-radius:50%;display:flex;align-items:center;
+        justify-content:center;font-weight:700;font-size:.95rem;
+        border:3px solid rgba(255,255,255,.1);transition:all .3s;position:relative;
+    }
+    .cefr-done {
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        border-color:#818cf8;box-shadow:0 4px 15px rgba(99,102,241,.4);color:#fff;
+    }
+    .cefr-current {
+        background:linear-gradient(135deg,#f59e0b,#f97316);
+        border-color:#fbbf24;box-shadow:0 4px 15px rgba(245,158,11,.4);color:#fff;
+        animation:currentPulse 2s infinite;
+    }
+    .cefr-future { background:rgba(255,255,255,.05);color:#64748b; }
+    .cefr-connector {
+        height:3px;flex:1;border-radius:2px;margin-top:-38px;
+        background:rgba(255,255,255,.08);align-self:center;
+    }
+    .cefr-connector.done { background:linear-gradient(90deg,#6366f1,#8b5cf6); }
+    @keyframes currentPulse {
+        0%,100%{box-shadow:0 4px 15px rgba(245,158,11,.4);}
+        50%{box-shadow:0 4px 25px rgba(245,158,11,.7);}
+    }
+    .empty-state {
+        text-align:center;padding:2rem;color:#64748b;font-size:.875rem;
+    }
+    .empty-state i { font-size:2rem;margin-bottom:.5rem;display:block;opacity:.4; }
+`;
+document.head.appendChild(_s);
+</script>
+</body>
 </html>

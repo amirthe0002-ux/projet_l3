@@ -1780,23 +1780,45 @@ class MessageDetailView(APIView):
 # ============================================================
 
 class NotificationListView(APIView):
+    """GET/POST /api/notifications/"""
     permission_classes = [IsAuthenticated]
-
+ 
     def get(self, request):
         qs     = Notification.objects.filter(utilisateur=request.user).order_by('-date_creation')
         statut = request.query_params.get('statut')
         if statut:
             qs = qs.filter(statut_notification=statut)
         return Response(NotificationSerializer(qs, many=True).data)
+ 
     def post(self, request):
         # Only staff roles can push notifications to other users
-        if request.user.role not in ['Enseignant', 'Dirigeant', 'Secretariat', 'Comptable']:
-            return Response({'error': 'Permission refusée.'}, status=403)
-        serializer = NotificationSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=201)
-        return Response(serializer.errors, status=400)
+        allowed_roles = ['Enseignant', 'Dirigeant', 'Secretariat', 'Comptable']
+        if request.user.role not in allowed_roles:
+            return Response(
+                {'error': 'Permission refusée. Seul le personnel peut envoyer des notifications.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+ 
+        # FIX: inject statut_notification default before validation
+        # so the serializer never fails on a missing required field
+        data = request.data.copy()
+        data.setdefault('statut_notification', 'Non_lu')
+        data.setdefault('urgent', False)
+ 
+        serializer = NotificationSerializer(data=data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+ 
+        try:
+            notif = serializer.save()
+        except Exception as e:
+            # Return clean JSON instead of an HTML 500 traceback
+            return Response(
+                {'error': 'Erreur lors de la création de la notification.', 'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+ 
+        return Response(NotificationSerializer(notif).data, status=status.HTTP_201_CREATED)
 
 
 class MarquerNotificationLueView(APIView):

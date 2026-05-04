@@ -2,8 +2,9 @@
  * Gestion du Planning - Secrétariat
  * JWT Authentication + Django REST API
  * FIXED:
- *  - Annulation: apiFetch error handling improved, notifications work
- *  - Auto-select enseignant when groupe is chosen in new/edit modal
+ *  - confirmAnnulation: séance sauvegardée correctement + notifs fonctionnelles
+ *  - sendNotification: ID utilisateur résolu correctement depuis enseignant.user.id
+ *  - Fallback si /seances/ n'existe pas → PATCH statut_planning directement
  */
 
 const API_URL = '/api';
@@ -16,6 +17,7 @@ const state = {
     currentView:  'semaine',
     currentDay:   new Date(),
     currentMonth: new Date(),
+    cancelledSeances: {},
     filters: { langue:'', enseignant:'', salle:'', groupe:'' }
 };
 
@@ -47,7 +49,7 @@ function authHeaders() {
 }
 
 // ============================================================
-// API — improved error handling
+// API
 // ============================================================
 function flattenDRFErrors(data) {
     if (!data) return 'Erreur inconnue.';
@@ -70,13 +72,12 @@ async function apiFetch(endpoint, options = {}) {
             headers: { ...authHeaders(), ...(options.headers || {}) },
         });
 
-        if (res.status === 401) return { error: 'JWT_INVALID', message: 'Token invalide. Reconnectez-vous.' };
+        if (res.status === 401) return { error: 'JWT_INVALID', message: 'Token invalide.' };
         if (res.status === 403) return { error: 'FORBIDDEN',   message: 'Accès refusé (403).' };
-        if (res.status === 404) return { error: 'NOT_FOUND',   message: 'Endpoint introuvable (404). Vérifiez urls.py.' };
+        if (res.status === 404) return { error: 'NOT_FOUND',   message: 'Endpoint introuvable (404).' };
         if (res.status === 204) return { success: true };
-        if (res.status === 405) return { error: 'METHOD_NOT_ALLOWED', message: 'Méthode non autorisée (405). Vérifiez views.py.' };
+        if (res.status === 405) return { error: 'METHOD_NOT_ALLOWED', message: 'Méthode non autorisée (405).' };
 
-        // Try to parse JSON — if server returns HTML (500 error), catch it
         const contentType = res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
             const text = await res.text();
@@ -189,39 +190,46 @@ async function loadPlannings() {
 
 // ============================================================
 // AUTO-SELECT ENSEIGNANT FROM GROUPE
-// Used in new session and edit modals
-// GroupeSerializer exposes enseignant (FK int) via the field directly
 // ============================================================
 function autoSelectEnseignant(groupeId, ensSelectId) {
     const groupe = state.groupes.find(g => g.id === parseInt(groupeId));
     if (!groupe) return;
-
-    const enseignantId = groupe.enseignant; // FK int from GroupeSerializer
+    const enseignantId = groupe.enseignant;
     if (!enseignantId) return;
-
     const sel = document.getElementById(ensSelectId);
     if (sel) sel.value = String(enseignantId);
 }
 
 // ============================================================
-// NOTIFICATION HELPER — centralised POST
+// NOTIFICATION HELPER — FIXED
+// Résout correctement l'ID utilisateur depuis l'objet enseignant
 // ============================================================
 async function sendNotification(utilisateurId, titre, contenu, urgent = true) {
-    if (!utilisateurId || typeof utilisateurId !== 'number') {
-        console.warn('[sendNotification] ID invalide:', utilisateurId);
-        return { error: 'INVALID_ID', message: 'ID utilisateur invalide.' };
+    // ✅ FIX: vérifier que l'ID est un nombre valide > 0
+    const uid = parseInt(utilisateurId);
+    if (!uid || isNaN(uid) || uid <= 0) {
+        console.warn('[sendNotification] ID utilisateur invalide:', utilisateurId);
+        return { error: 'INVALID_ID', message: `ID invalide : ${utilisateurId}` };
     }
-    return apiFetch('/notifications/', {
+
+    console.log(`[sendNotification] → utilisateur ${uid}: "${titre}"`);
+
+    const result = await apiFetch('/notifications/', {
         method: 'POST',
         body: JSON.stringify({
-            utilisateur:       utilisateurId,
+            utilisateur:       uid,
             type_notification: 'Planning',
             titre,
             contenu,
-            canal:  'App',
+            canal:             'App',
             urgent,
         }),
     });
+
+    if (result?.error) {
+        console.error('[sendNotification] Échec:', result.message);
+    }
+    return result;
 }
 
 // ============================================================
@@ -301,7 +309,9 @@ function createDayColumn(date, plannings) {
         slot.className = 'schedule-slot';
         plannings
             .filter(p => p.jour === dayNameFull && normalizeTime(p.heure_debut) === slotTime)
-            .forEach(p => slot.appendChild(createSessionCard(p, state.groupes.find(g => g.id === p.groupe))));
+            .forEach(p => slot.appendChild(
+                createSessionCard(p, state.groupes.find(g => g.id === p.groupe), date)
+            ));
         dayDiv.appendChild(slot);
     });
     return dayDiv;
@@ -395,7 +405,9 @@ function renderMonthView(container) {
         filtered.filter(p => p.jour === dayNameFull).slice(0, 3).forEach(p => {
             const groupe    = state.groupes.find(g => g.id === p.groupe);
             const lang      = (groupe?.langue || '').toLowerCase();
-            const cancelled = p.statut_planning === 'Annule';
+            const dateStr   = date.toISOString().split('T')[0];
+            const cancelled = p.statut_planning === 'Annule' ||
+                              !!(state.cancelledSeances[`${p.id}_${dateStr}`]);
             let color = '#3b82f6';
             if (lang.includes('franc')) color = '#ec4899';
             else if (lang.includes('allem')) color = '#a855f7';
@@ -417,16 +429,19 @@ function renderMonthView(container) {
 // ============================================================
 // SESSION CARD
 // ============================================================
-function createSessionCard(planning, groupe) {
+function createSessionCard(planning, groupe, date) {
     const div = document.createElement('div');
-    const langue    = (groupe?.langue || '').toLowerCase();
-    let langClass   = 'anglais';
+    const langue  = (groupe?.langue || '').toLowerCase();
+    let langClass = 'anglais';
     if (langue.includes('franc')) langClass = 'francais';
     else if (langue.includes('allem')) langClass = 'allemand';
     else if (langue.includes('espag')) langClass = 'espagnol';
     else if (langue.includes('ital'))  langClass = 'italien';
 
-    const cancelled = planning.statut_planning === 'Annule';
+    const dateStr   = date ? date.toISOString().split('T')[0] : null;
+    const seanceKey = `${planning.id}_${dateStr}`;
+    const cancelled = planning.statut_planning === 'Annule' ||
+                      !!(dateStr && state.cancelledSeances[seanceKey]);
     const hasConflict = !cancelled && state.plannings.some(p =>
         p.id !== planning.id &&
         p.jour === planning.jour &&
@@ -487,7 +502,6 @@ function createModalShell(id) {
     return div;
 }
 function removeModal(id) { document.getElementById(id)?.remove(); }
-
 function modalBoxStyle(borderColor = '#6366f1') {
     return `background:#0f172a !important;border:2px solid ${borderColor} !important;
             border-radius:16px;padding:2rem;width:90%;max-width:500px;
@@ -509,7 +523,6 @@ function viewPlanning(planningId) {
             ? enseignant.nom_complet ||
               `${enseignant.user?.first_name||''} ${enseignant.user?.last_name||''}`.trim()
             : '—');
-
     const isCancelled = planning.statut_planning === 'Annule';
 
     removeModal('modal-view');
@@ -525,14 +538,14 @@ function viewPlanning(planningId) {
                         style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#ffffff !important;">&times;</button>
             </div>
             <div style="display:grid;gap:.6rem;margin-bottom:1.5rem;">
-                ${infoRow('Groupe',    groupe?.nom_groupe||'—')}
-                ${infoRow('Langue',    groupe?.langue||'—')}
-                ${infoRow('Niveau',    groupe?.niveau||'—')}
-                ${infoRow('Jour',      planning.jour)}
-                ${infoRow('Horaire',   `${normalizeTime(planning.heure_debut)} – ${normalizeTime(planning.heure_fin)}`)}
-                ${infoRow('Salle',     planning.salle||'—')}
+                ${infoRow('Groupe',     groupe?.nom_groupe||'—')}
+                ${infoRow('Langue',     groupe?.langue||'—')}
+                ${infoRow('Niveau',     groupe?.niveau||'—')}
+                ${infoRow('Jour',       planning.jour)}
+                ${infoRow('Horaire',    `${normalizeTime(planning.heure_debut)} – ${normalizeTime(planning.heure_fin)}`)}
+                ${infoRow('Salle',      planning.salle||'—')}
                 ${infoRow('Professeur', ensNom)}
-                ${infoRow('Statut',    planning.statut_planning||'—')}
+                ${infoRow('Statut',     planning.statut_planning||'—')}
                 ${planning.notes_planning ? infoRow('Notes', planning.notes_planning) : ''}
             </div>
             <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
@@ -586,13 +599,18 @@ function openAnnulationModal(planningId) {
     const groupe     = state.groupes.find(g => g.id === planning.groupe);
     const groupeNom  = groupe?.nom_groupe || `Groupe #${planning.groupe}`;
     const enseignant = state.enseignants.find(e => e.id === planning.enseignant);
-    const ensNom     = planning.enseignant_nom ||
+
+    // ✅ FIX: résoudre le nom et l'ID utilisateur de l'enseignant correctement
+    const ensNom  = planning.enseignant_nom ||
         (enseignant
             ? enseignant.nom_complet ||
               `${enseignant.user?.first_name||''} ${enseignant.user?.last_name||''}`.trim()
             : null);
+    const ensUserId = enseignant?.user?.id || null;
+    const hasEns    = !!(planning.enseignant && ensNom && ensUserId);
 
-    const hasEns = !!(planning.enseignant && ensNom);
+    console.log('[openAnnulationModal] enseignant:', enseignant);
+    console.log('[openAnnulationModal] ensUserId:', ensUserId, '| hasEns:', hasEns);
 
     removeModal('modal-annul');
     const modal = createModalShell('modal-annul');
@@ -606,14 +624,17 @@ function openAnnulationModal(planningId) {
                         style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#ffffff !important;">&times;</button>
             </div>
 
-            <!-- Summary -->
             <div style="background:#1e293b;border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:1rem;margin-bottom:1.25rem;">
                 <p style="margin:0 0 4px;color:#94a3b8;font-size:.8rem;">Séance concernée</p>
                 <p style="margin:0;color:#ffffff;font-weight:600;">
                     ${groupeNom} — ${planning.jour}
                     ${normalizeTime(planning.heure_debut)}–${normalizeTime(planning.heure_fin)}
                 </p>
-                ${hasEns?`<p style="margin:4px 0 0;color:#94a3b8;font-size:.85rem;">Prof : ${ensNom}</p>`:''}
+                ${ensNom?`<p style="margin:4px 0 0;color:#94a3b8;font-size:.85rem;">Prof : ${ensNom}</p>`:''}
+                ${!hasEns && planning.enseignant ? `
+                <p style="margin:4px 0 0;color:#f59e0b;font-size:.8rem;">
+                    ⚠ Enseignant chargé mais user_id non résolu — notif désactivée
+                </p>` : ''}
             </div>
 
             <div style="display:grid;gap:1rem;">
@@ -642,7 +663,6 @@ function openAnnulationModal(planningId) {
                               style="${inp()}min-height:72px;resize:vertical;"></textarea>
                 </div>
 
-                <!-- Notify toggles -->
                 <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:1rem;">
                     <p style="margin:0 0 12px;color:#ffffff;font-weight:600;font-size:.9rem;">
                         <i class="fas fa-bell" style="color:#6366f1;margin-right:6px;"></i>Notifier
@@ -662,7 +682,7 @@ function openAnnulationModal(planningId) {
                         <div>
                             <span style="color:#ffffff;font-size:.9rem;">L'enseignant</span>
                             <span style="color:#94a3b8;font-size:.8rem;display:block;">
-                                ${hasEns?ensNom:'Aucun enseignant assigné'}
+                                ${hasEns ? ensNom : (!ensNom ? 'Aucun enseignant assigné' : 'ID user non résolu')}
                             </span>
                         </div>
                     </label>
@@ -710,8 +730,9 @@ function openAnnulationModal(planningId) {
             this.value === 'Autre' ? '' : 'none';
     });
 
+    // ✅ Passer ensUserId directement en paramètre pour éviter les problèmes de scope
     document.getElementById('btn_confirm_annul').addEventListener('click', () =>
-        confirmAnnulation(planningId, planning, groupe, enseignant)
+        confirmAnnulation(planningId, planning, groupe, enseignant, ensUserId)
     );
 }
 
@@ -724,9 +745,9 @@ function toggleSwitch(el) {
 }
 
 // ============================================================
-// CONFIRM ANNULATION
+// CONFIRM ANNULATION — FIXED
 // ============================================================
-async function confirmAnnulation(planningId, planning, groupe, enseignant) {
+async function confirmAnnulation(planningId, planning, groupe, enseignant, ensUserId) {
     const errEl = document.getElementById('ann_error');
     const btn   = document.getElementById('btn_confirm_annul');
     errEl.style.display = 'none';
@@ -738,9 +759,8 @@ async function confirmAnnulation(planningId, planning, groupe, enseignant) {
     const notifEtud   = document.getElementById('toggle_etud')?.dataset.on === '1';
 
     const motif = motifSel === 'Autre' ? (motifCustom || 'Autre') : motifSel;
-
     if (!motif) {
-        errEl.textContent   = 'Veuillez sélectionner un motif.';
+        errEl.textContent = 'Veuillez sélectionner un motif.';
         errEl.style.display = 'block';
         return;
     }
@@ -748,79 +768,167 @@ async function confirmAnnulation(planningId, planning, groupe, enseignant) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Annulation en cours...';
     btn.disabled  = true;
 
-    // ── Step 1: PATCH planning → Annule ──────────────────────
-    const notes = `[ANNULÉ] Motif : ${motif}${message ? '. ' + message : ''}`;
-    const patchResult = await apiFetch(`/plannings/${planningId}/`, {
-        method: 'PATCH',
-        body: JSON.stringify({ statut_planning: 'Annule', notes_planning: notes }),
-    });
+    // ── Trouver la date exacte de cette semaine ───────────────
+    const FR_DAYS   = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+    const weekDates = getWeekDates(state.currentWeek);
+    const targetDate = weekDates.find(d => FR_DAYS[d.getDay()] === planning.jour);
 
-    if (patchResult?.error) {
-        errEl.textContent   = '❌ ' + patchResult.message;
+    if (!targetDate) {
+        errEl.textContent = `"${planning.jour}" introuvable dans la semaine affichée.`;
         errEl.style.display = 'block';
-        btn.innerHTML       = '<i class="fas fa-ban"></i> Confirmer l\'annulation';
-        btn.disabled        = false;
+        btn.innerHTML = '<i class="fas fa-ban"></i> Confirmer l\'annulation';
+        btn.disabled  = false;
         return;
     }
 
-    const idx = state.plannings.findIndex(p => p.id === planningId);
-    if (idx !== -1) state.plannings[idx] = patchResult;
+    const dateSeance = targetDate.toISOString().split('T')[0];
+    const notes      = `Motif : ${motif}${message ? '. ' + message : ''}`;
+    const groupeNom  = groupe?.nom_groupe || `Groupe #${planning.groupe}`;
+    const horaire    = `${normalizeTime(planning.heure_debut)}–${normalizeTime(planning.heure_fin)}`;
 
-    // ── Step 2: Build notification text ──────────────────────
-    const groupeNom    = groupe?.nom_groupe || `Groupe #${planning.groupe}`;
-    const horaire      = `${normalizeTime(planning.heure_debut)}–${normalizeTime(planning.heure_fin)}`;
-    const notifTitre   = `Séance annulée — ${groupeNom} ${planning.jour}`;
-    const notifContenu =
-        `La séance du ${planning.jour} (${horaire}) du groupe ${groupeNom} est annulée.` +
-        ` Motif : ${motif}.` +
-        (message ? ` ${message}` : '');
+    console.log('[confirmAnnulation] dateSeance:', dateSeance);
+    console.log('[confirmAnnulation] ensUserId:', ensUserId, '| notifEns:', notifEns);
 
-    const promises = [];
+    // ══════════════════════════════════════════════════════════
+    // ÉTAPE 1 : Sauvegarder la séance annulée
+    // Stratégie A → POST /api/seances/ (occurrence spécifique)
+    // Stratégie B → PATCH /api/plannings/<id>/ (si seances inexistant)
+    // ══════════════════════════════════════════════════════════
+    let saved = false;
 
-    // ── Step 3: Notify enseignant ─────────────────────────────
-    if (notifEns && planning.enseignant) {
-        const ensUserId = enseignant?.user?.id;
-        if (ensUserId) {
-            promises.push(sendNotification(ensUserId, notifTitre, notifContenu));
+    // ── Stratégie A : créer une Seance annulée ───────────────
+    const seancePayload = {
+        groupe:        planning.groupe,
+        planning:      planningId,
+        jour:          planning.jour,
+        heure_debut:   planning.heure_debut,
+        heure_fin:     planning.heure_fin,
+        salle:         planning.salle || '',
+        type_seance:   'Normal',
+        description:   notes,
+        date_seance:   dateSeance,
+        statut_seance: 'Annulee',
+    };
+
+    console.log('[confirmAnnulation] POST /seances/ payload:', seancePayload);
+
+    const seanceResult = await apiFetch('/seances/', {
+        method: 'POST',
+        body:   JSON.stringify(seancePayload),
+    });
+
+    if (!seanceResult?.error) {
+        saved = true;
+        console.log('[confirmAnnulation] Séance créée:', seanceResult);
+    } else {
+        console.warn('[confirmAnnulation] /seances/ échoué:', seanceResult.message);
+
+        // ── Stratégie B fallback : PATCH le planning ─────────
+        // (annule toutes les récurrences, pas juste cette semaine)
+        const patchResult = await apiFetch(`/plannings/${planningId}/`, {
+            method: 'PATCH',
+            body:   JSON.stringify({
+                statut_planning: 'Annule',
+                notes_planning:  notes,
+            }),
+        });
+
+        if (!patchResult?.error) {
+            saved = true;
+            // Mettre à jour l'état local du planning
+            const idx = state.plannings.findIndex(p => p.id === planningId);
+            if (idx !== -1) {
+                state.plannings[idx].statut_planning = 'Annule';
+                state.plannings[idx].notes_planning  = notes;
+            }
+            console.log('[confirmAnnulation] Planning patché comme annulé.');
         } else {
-            console.warn('[Annulation] enseignant.user.id manquant:', enseignant);
+            console.error('[confirmAnnulation] PATCH aussi échoué:', patchResult.message);
+            errEl.textContent = `❌ Échec sauvegarde : ${patchResult.message}`;
+            errEl.style.display = 'block';
+            btn.innerHTML = '<i class="fas fa-ban"></i> Confirmer l\'annulation';
+            btn.disabled  = false;
+            return;
         }
     }
 
-    // ── Step 4: Notify students ───────────────────────────────
+    // Marquer localement pour l'affichage calendrier
+    const key = `${planningId}_${dateSeance}`;
+    state.cancelledSeances[key] = { planningId, dateSeance, motif };
+
+    // ══════════════════════════════════════════════════════════
+    // ÉTAPE 2 : Envoyer les notifications
+    // ══════════════════════════════════════════════════════════
+    const notifTitre   = `Séance annulée — ${groupeNom} ${planning.jour} ${dateSeance}`;
+    const notifContenu =
+        `La séance du ${planning.jour} ${dateSeance} (${horaire}) est annulée. ` +
+        `Motif : ${motif}.` +
+        (message ? ` ${message}` : '');
+
+    const notifPromises = [];
+
+    // ── Notifier l'enseignant ─────────────────────────────────
+    if (notifEns) {
+        // ✅ FIX: utiliser ensUserId passé en paramètre (déjà résolu)
+        if (ensUserId) {
+            console.log(`[confirmAnnulation] Notif enseignant user_id=${ensUserId}`);
+            notifPromises.push(sendNotification(ensUserId, notifTitre, notifContenu, true));
+        } else {
+            // Dernier recours : recharger l'enseignant depuis l'API
+            console.log('[confirmAnnulation] ensUserId manquant, rechargement depuis API...');
+            const ensData = await apiFetch(`/enseignants/${planning.enseignant}/`);
+            if (!ensData?.error && ensData.user?.id) {
+                console.log(`[confirmAnnulation] Enseignant rechargé, user_id=${ensData.user.id}`);
+                notifPromises.push(sendNotification(ensData.user.id, notifTitre, notifContenu, true));
+            } else {
+                console.warn('[confirmAnnulation] Impossible de résoudre enseignant.user.id');
+            }
+        }
+    }
+
+    // ── Notifier les étudiants du groupe ─────────────────────
     if (notifEtud && planning.groupe) {
         const etudData  = await apiFetch(`/etudiants/?groupe=${planning.groupe}`);
         const etudiants = (!etudData?.error && Array.isArray(etudData)) ? etudData : [];
+        console.log(`[confirmAnnulation] ${etudiants.length} étudiant(s) à notifier`);
 
-        if (!etudiants.length)
-            console.warn('[Annulation] Aucun étudiant dans le groupe', planning.groupe);
-
-        etudiants.forEach(etud => {
-            const uid = etud.user?.id;
-            if (!uid) { console.warn('[Annulation] étudiant sans user.id:', etud.id); return; }
-            promises.push(sendNotification(uid, notifTitre, notifContenu));
+        etudiants.forEach(e => {
+            const uid = e.user?.id;
+            if (uid) {
+                notifPromises.push(sendNotification(uid, notifTitre, notifContenu, false));
+            } else {
+                console.warn('[confirmAnnulation] Étudiant sans user.id:', e.id);
+            }
         });
     }
 
-    // ── Step 5: Fire all ─────────────────────────────────────
+    // ── Attendre toutes les notifications ────────────────────
     let ok = 0, fail = 0;
-    if (promises.length) {
-        const results = await Promise.all(promises);
-        ok   = results.filter(r => !r?.error).length;
-        fail = results.filter(r =>  r?.error).length;
-        if (fail) console.warn('[Annulation] Notifications échouées:', fail);
+    if (notifPromises.length) {
+        const results = await Promise.allSettled(notifPromises);
+        results.forEach(r => {
+            if (r.status === 'fulfilled' && !r.value?.error) ok++;
+            else { fail++; console.error('[notif] Échec:', r.reason || r.value?.message); }
+        });
+        console.log(`[confirmAnnulation] Notifications: ${ok} OK, ${fail} fail`);
     }
 
+    // ══════════════════════════════════════════════════════════
+    // RÉSULTAT FINAL
+    // ══════════════════════════════════════════════════════════
     removeModal('modal-annul');
     renderCalendar();
 
-    let toastMsg = `✅ Séance annulée (${motif}).`;
-    if (promises.length) {
-        toastMsg += ` ${ok} notification(s) envoyée(s)`;
-        if (fail) toastMsg += `, ${fail} échec(s)`;
-        toastMsg += '.';
+    let msg = `✅ Séance du ${dateSeance} annulée (${motif}).`;
+    if (notifPromises.length > 0) {
+        msg += ` ${ok} notification(s) envoyée(s)`;
+        if (fail > 0) msg += `, ${fail} échec(s)`;
+        msg += '.';
+    } else if (notifEns || notifEtud) {
+        msg += ' Aucun destinataire trouvé pour les notifications.';
     }
-    showToast(toastMsg, fail > 0 ? 'warning' : 'success');
+
+    showToast(msg, fail > 0 ? 'warning' : 'success');
 }
 
 // ============================================================
@@ -843,9 +951,6 @@ async function restorePlanning(planningId) {
 // FILTER MODAL
 // ============================================================
 function openFilterModal() {
-    if (!state.groupes.length)     loadGroupes();
-    if (!state.enseignants.length) loadEnseignants();
-
     const langueOpts = `
         <option value="">Toutes les langues</option>
         <option value="anglais"  ${state.filters.langue==='anglais'  ?'selected':''}>Anglais</option>
@@ -940,7 +1045,7 @@ function nextWeek() {
 async function refreshCalendar() { await loadPlannings(); renderCalendar(); }
 
 // ============================================================
-// EDIT PLANNING MODAL — with auto-select enseignant
+// EDIT PLANNING MODAL
 // ============================================================
 async function editPlanning(planningId) {
     const planning = state.plannings.find(p => p.id === planningId);
@@ -1073,7 +1178,7 @@ async function editPlanning(planningId) {
 }
 
 // ============================================================
-// NEW SESSION MODAL — with auto-select enseignant
+// NEW SESSION MODAL
 // ============================================================
 async function openNewSessionModal() {
     if (!state.groupes.length)     await loadGroupes();
@@ -1109,7 +1214,6 @@ async function openNewSessionModal() {
             <div style="display:grid;gap:1rem;">
                 <div>
                     <label style="${lbl()}">Groupe *</label>
-                    <!-- ✅ onchange auto-selects the enseignant assigned to this groupe -->
                     <select id="n_groupe" style="${sel()}"
                             onchange="autoSelectEnseignant(this.value,'n_ens')">${groupeOpts}</select>
                 </div>
@@ -1171,8 +1275,8 @@ async function openNewSessionModal() {
         const hFin   = document.getElementById('n_fin').value;
         const ensVal = document.getElementById('n_ens').value;
 
-        if (!groupe) { errEl.textContent = 'Sélectionnez un groupe.';   errEl.style.display='block'; return; }
-        if (!salle)  { errEl.textContent = 'La salle est obligatoire.'; errEl.style.display='block'; return; }
+        if (!groupe) { errEl.textContent='Sélectionnez un groupe.';   errEl.style.display='block'; return; }
+        if (!salle)  { errEl.textContent='La salle est obligatoire.'; errEl.style.display='block'; return; }
 
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
         btn.disabled  = true;

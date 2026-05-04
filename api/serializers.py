@@ -478,6 +478,9 @@ class PlanningSerializer(serializers.ModelSerializer):
         jour    = attrs.get('jour')
         salle   = attrs.get('salle')
         enseignant = attrs.get('enseignant')
+       
+        if not all([jour, h_debut, h_fin, salle]):
+           return attrs
 
         if h_debut and h_fin and h_debut >= h_fin:
             raise serializers.ValidationError("L'heure de fin doit être après l'heure de début.")
@@ -762,11 +765,19 @@ class NotificationSerializer(serializers.ModelSerializer):
             'date_creation', 'date_lecture', 'date_programmee',
         ]
         read_only_fields = ['id', 'date_creation']
+        # FIX: give statut_notification its model-level default so POST doesn't require it
+        extra_kwargs = {
+            'statut_notification': {'default': 'Non_lu', 'required': False},
+            'lien_action':         {'required': False, 'allow_null': True, 'allow_blank': True},
+            'urgent':              {'required': False, 'default': False},
+            'date_lecture':        {'required': False, 'allow_null': True},
+            'date_programmee':     {'required': False, 'allow_null': True},
+        }
 
 
 class PreferenceNotificationSerializer(serializers.ModelSerializer):
     class Meta:
-        model = PreferenceNotification
+        model = 6
         fields = [
             'id', 'utilisateur', 'type_notification', 'canal_email',
             'canal_sms', 'canal_app', 'heure_min_envoi', 'heure_max_envoi',
