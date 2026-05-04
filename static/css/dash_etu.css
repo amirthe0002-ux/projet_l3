@@ -727,3 +727,17 @@ body {
         align-items: flex-start;
     }
 }
+
+/* SVG Icons styling */
+.nav-icon {
+    flex-shrink: 0;
+    stroke: currentColor;
+}
+
+.card-icon svg {
+    stroke: var(--white);
+}
+
+.resource-icon svg {
+    stroke: var(--white);
+}

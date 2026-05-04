@@ -34,7 +34,7 @@ from .models import (
     Notification, PreferenceNotification, ParametreSysteme, Audit
 )
 from .serializers import (
-    UtilisateurSerializer, UtilisateurUpdateSerializer, ChangePasswordSerializer,
+    EtudiantUpdateMoyenneSerializer, UtilisateurSerializer, UtilisateurUpdateSerializer, ChangePasswordSerializer,
     ParentSerializer, ParentCreateSerializer,
     EnseignantSerializer, EnseignantCreateSerializer,
     GroupeSerializer,
@@ -686,19 +686,24 @@ class EtudiantListCreateView(APIView):
 
 
 class EtudiantDetailView(APIView):
+    """GET/PUT/DELETE /api/etudiants/<pk>/"""
     permission_classes = [IsAuthenticated]
 
     def get_object(self, pk, request):
         try:
-            etudiant = Etudiant.objects.select_related('user', 'groupe', 'parent__user').get(pk=pk)
+            etudiant = Etudiant.objects.select_related(
+                'user', 'groupe', 'parent__user'
+            ).get(pk=pk)
         except Etudiant.DoesNotExist:
             return None
+
         if request.user.role == 'Etudiant':
             if etudiant.user != request.user:
                 return None
         if request.user.role == 'Parent':
             try:
-                if etudiant.parent != request.user.parent_profile:
+                parent = request.user.parent_profile
+                if etudiant.parent != parent:
                     return None
             except Exception:
                 return None
@@ -707,50 +712,92 @@ class EtudiantDetailView(APIView):
     def get(self, request, pk):
         etudiant = self.get_object(pk, request)
         if not etudiant:
-            return Response({'error': 'Étudiant introuvable.'}, status=404)
+            return Response(
+                {'error': 'Étudiant introuvable.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         return Response(EtudiantSerializer(etudiant).data)
 
     def put(self, request, pk):
-        if request.user.role not in ['Secretariat', 'Dirigeant']:
-            return Response({'error': 'Permission refusée.'}, status=403)
         etudiant = self.get_object(pk, request)
         if not etudiant:
-            return Response({'error': 'Étudiant introuvable.'}, status=404)
-        serializer = EtudiantSerializer(etudiant, data=request.data, partial=True)
+            return Response(
+                {'error': 'Étudiant introuvable.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # ── Enseignant: can only update moyenne_generale / niveau / assiduite ──
+        if request.user.role == 'Enseignant':
+            # Make sure this enseignant teaches the student's group
+            try:
+                enseignant = request.user.enseignant_profile
+                if etudiant.groupe and etudiant.groupe.enseignant != enseignant:
+                    return Response(
+                        {'error': 'Cet étudiant n\'est pas dans votre groupe.'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except Exception:
+                return Response(
+                    {'error': 'Profil enseignant introuvable.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # Only allow these specific fields
+            ALLOWED = {'moyenne_generale', 'niveau_actuel', 'taux_assiduité'}
+            payload  = {k: v for k, v in request.data.items() if k in ALLOWED}
+
+            if not payload:
+                return Response(
+                    {'error': 'Aucun champ modifiable fourni.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Direct model update — bypass serializer read_only restrictions
+            for field, value in payload.items():
+                setattr(etudiant, field, value)
+            etudiant.save(update_fields=list(payload.keys()))
+
+            log_audit(request, 'UPDATE', 'Etudiant', pk,
+                      nouvelle_valeur=payload)
+            return Response(EtudiantSerializer(etudiant).data)
+
+        # ── Secretariat / Dirigeant: full update ──────────────────────────────
+        if request.user.role not in ['Secretariat', 'Dirigeant']:
+            return Response(
+                {'error': 'Permission refusée.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = EtudiantSerializer(
+            etudiant, data=request.data, partial=True
+        )
         if serializer.is_valid():
             serializer.save()
             log_audit(request, 'UPDATE', 'Etudiant', pk)
             return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk):
+        return self.put(request, pk)
 
     def delete(self, request, pk):
         if request.user.role not in ['Secretariat', 'Dirigeant']:
-            return Response({'error': 'Permission refusée.'}, status=403)
+            return Response(
+                {'error': 'Permission refusée.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         etudiant = self.get_object(pk, request)
         if not etudiant:
-            return Response({'error': 'Étudiant introuvable.'}, status=404)
+            return Response(
+                {'error': 'Étudiant introuvable.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         etudiant.statut_etudiant = 'Inactif'
         etudiant.save()
         etudiant.user.statut = 'Inactif'
         etudiant.user.save()
         log_audit(request, 'DELETE', 'Etudiant', pk)
-        return Response({'message': 'Étudiant archivé.'})
-
-
-class EtudiantMeView(APIView):
-    """GET /api/etudiants/me/"""
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        if request.user.role != 'Etudiant':
-            return Response({'error': 'Réservé aux étudiants.'}, status=403)
-        try:
-            etudiant = Etudiant.objects.select_related(
-                'user', 'groupe', 'parent__user'
-            ).get(user=request.user)
-            return Response(EtudiantSerializer(etudiant).data)
-        except Etudiant.DoesNotExist:
-            return Response({'error': 'Profil étudiant introuvable.'}, status=404)
+        return Response({'message': 'Étudiant archivé.'}, status=status.HTTP_200_OK)
 
 
 # ============================================================
@@ -1742,11 +1789,14 @@ class NotificationListView(APIView):
             qs = qs.filter(statut_notification=statut)
         return Response(NotificationSerializer(qs, many=True).data)
     def post(self, request):
+        # Only staff roles can push notifications to other users
+        if request.user.role not in ['Enseignant', 'Dirigeant', 'Secretariat', 'Comptable']:
+            return Response({'error': 'Permission refusée.'}, status=403)
         serializer = NotificationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
 
 
 class MarquerNotificationLueView(APIView):

@@ -10,6 +10,13 @@ class SilentRejectConsumer(WebsocketConsumer):
 
 
 websocket_urlpatterns = [
+    # Notifications — inchangé
     re_path(r'^ws/notifications/$', consumers.NotificationConsumer.as_asgi()),
-    re_path(r'.*', SilentRejectConsumer.as_asgi()),  # catch-all — must be last
+
+    # ✅ Chat temps réel
+    # ws://host/ws/chat/42/?token=<jwt>  (42 = ID de l'autre utilisateur)
+    re_path(r'^ws/chat/(?P<other_user_id>\d+)/$', consumers.ChatConsumer.as_asgi()),
+
+    # Catch-all — doit rester en dernier
+    re_path(r'.*', SilentRejectConsumer.as_asgi()),
 ]

@@ -37,7 +37,7 @@
         <main class="main">
             <header class="header">
                 <h1>Tableau de Bord</h1>
-                <button class="notification-btn"><i class="fas fa-bell"></i><span class="notification-dot"></span></button>
+                <div id="notif-bell-container"></div>
             </header>
 
             <div class="children-tabs">
@@ -94,5 +94,6 @@
         </main>
     </div>
 </body>
+<script src="{% static 'js/notifications.js' %}"></script>
  <script src="{% static 'js/dashboard_parent.js' %}"></script>
 </html>

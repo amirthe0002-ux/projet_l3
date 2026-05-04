@@ -248,7 +248,7 @@ class EtudiantSerializer(serializers.ModelSerializer):
             'niveau_actuel', 'moyenne_generale', 'taux_assiduité',
             'statut_etudiant', 'date_inscription',
         ]
-        read_only_fields = ['id', 'moyenne_generale', 'taux_assiduité', 'date_inscription']
+        read_only_fields = ['id','date_inscription']
 
     def get_groupe_nom(self, obj):
         return obj.groupe.nom_groupe if obj.groupe else None
@@ -277,6 +277,13 @@ class EtudiantSerializer(serializers.ModelSerializer):
         if obj.parent:
             return obj.parent.relation_enfant
         return None
+    
+
+class EtudiantUpdateMoyenneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Etudiant
+        fields = ['moyenne_generale', 'niveau_actuel', 'taux_assiduité']
+        # All writable — no read_only_fields
 
 
 # ============================================================
@@ -754,7 +761,7 @@ class NotificationSerializer(serializers.ModelSerializer):
             'canal', 'statut_notification', 'lien_action', 'urgent',
             'date_creation', 'date_lecture', 'date_programmee',
         ]
-        read_only_fields = ['id', 'utilisateur', 'date_creation']
+        read_only_fields = ['id', 'date_creation']
 
 
 class PreferenceNotificationSerializer(serializers.ModelSerializer):
