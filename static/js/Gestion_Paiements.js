@@ -1,35 +1,28 @@
 /**
  * Gestion des Paiements - Secrétariat / Comptable / Dirigeant
  * JWT Authentication + Django REST API
+ *
+ * FIXES:
+ *  1. Overdue detection: every 1st of month, unpaid/partial paiements
+ *     whose date_echeance has passed are flagged visually (red row +
+ *     "En retard" badge) and a notification is pushed to the student.
+ *  2. Dashboard secretariat now shows teacher salary expenses.
+ *
  * File: static/js/Gestion_Paiements.js
- *
- * API endpoints used:
- *   GET    /api/paiements/          → list (filters: etudiant, statut, periode)
- *   POST   /api/paiements/          → create
- *   GET    /api/paiements/<pk>/     → detail
- *   PUT    /api/paiements/<pk>/     → update
- *   DELETE /api/paiements/<pk>/     → delete
- *   GET    /api/etudiants/          → for student selector in modal
- *
- * Paiement model fields:
- *   etudiant, montant_du, montant_paye, solde (read-only, computed),
- *   mode_paiement, date_paiement, reference_paiement,
- *   statut_paiement, periode, date_echeance
- *
- * statut_paiement choices: Paye | Partiellement_paye | Impaye
- * mode_paiement choices:   Especes | Cheque | Virement | Carte
  */
 
 const API_URL = '/api';
 
 const state = {
-    paiements:  [],
-    filtered:   [],
-    etudiants:  [],
-    searchTerm: '',
+    paiements:    [],
+    filtered:     [],
+    etudiants:    [],
+    searchTerm:   '',
     filterStatut: 'all',
-    filterPeriode: 'all',
+    filterPeriode:'all',
     filterMode:   'all',
+    // ids of paiements flagged overdue this session
+    overdueIds:   new Set(),
 };
 
 // ============================================================
@@ -44,14 +37,12 @@ function getToken() {
         null
     );
 }
-
 function getUser() {
     try {
         const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
         return raw ? JSON.parse(raw) : null;
     } catch { return null; }
 }
-
 function authHeaders() {
     const token = getToken();
     const h = { 'Content-Type': 'application/json' };
@@ -107,7 +98,6 @@ function checkSession() {
     const token = getToken();
     const user  = getUser();
     if (!token || !user) { window.location.href = '/login/'; return null; }
-    // IsComptable permission = Secretariat + Comptable + Dirigeant
     if (!['Secretariat', 'Comptable', 'Dirigeant'].includes(user.role)) {
         window.location.href = '/login/'; return null;
     }
@@ -145,12 +135,10 @@ function fmtDA(v) {
     if (v === null || v === undefined || v === '') return '—';
     return new Intl.NumberFormat('fr-DZ').format(parseFloat(v)) + ' DA';
 }
-
 function fmtDate(d) {
     if (!d) return '—';
     return new Date(d).toLocaleDateString('fr-DZ');
 }
-
 function statutBadge(statut) {
     const map = {
         'Paye':              { cls: 'status-paid',    label: 'Payé' },
@@ -160,17 +148,160 @@ function statutBadge(statut) {
     const s = map[statut] || { cls: '', label: statut };
     return `<span class="payment-status ${s.cls}">${s.label}</span>`;
 }
-
 function modeLabel(m) {
     return { Especes:'Espèces', Cheque:'Chèque', Virement:'Virement', Carte:'Carte' }[m] || m || '—';
 }
-
 function inp() {
     return `width:100%;padding:10px 14px;border:2px solid #e5e7eb;border-radius:8px;
             font-size:0.9rem;outline:none;box-sizing:border-box;font-family:inherit;background:#f9fafb;`;
 }
 function lbl() {
     return `font-size:0.875rem;font-weight:600;color:#374151;display:block;margin-bottom:6px;`;
+}
+
+// ============================================================
+// OVERDUE DETECTION
+// ============================================================
+
+/**
+ * Returns true if today is the 1st of the month OR if we are
+ * running for the first time this session (so we always check
+ * on first load, not just on the 1st).
+ */
+function shouldRunOverdueCheck() {
+    const today = new Date();
+    const lastRun = sessionStorage.getItem('overdue_last_run');
+    const todayKey = today.toISOString().split('T')[0]; // "YYYY-MM-DD"
+
+    // Always run once per session; also re-run every 1st of the month
+    if (!lastRun || lastRun !== todayKey) {
+        sessionStorage.setItem('overdue_last_run', todayKey);
+        return true;
+    }
+    return today.getDate() === 1;
+}
+
+/**
+ * For each unpaid/partial paiement whose date_echeance has passed,
+ * flag it locally and push a notification to the student via the API.
+ */
+async function checkAndNotifyOverdue(paiements) {
+    if (!shouldRunOverdueCheck()) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const overdue = paiements.filter(p => {
+        if (p.statut_paiement === 'Paye') return false;
+        if (!p.date_echeance) return false;
+        const due = new Date(p.date_echeance);
+        due.setHours(0, 0, 0, 0);
+        return due < today;
+    });
+
+    if (!overdue.length) return;
+
+    // Mark locally
+    overdue.forEach(p => state.overdueIds.add(p.id));
+
+    // Show a global banner
+    showOverdueBanner(overdue.length);
+
+    // Push a notification to each student (fire-and-forget, soft errors)
+    for (const p of overdue) {
+        try {
+            await apiFetch('/notifications/', {
+                method: 'POST',
+                body: JSON.stringify({
+                    utilisateur:      p.etudiant,
+                    type_notification:'Paiement',
+                    titre:            '⚠️ Paiement en retard',
+                    contenu: `Votre paiement de ${fmtDA(p.montant_du)} (période : ${p.periode || '—'}) `
+                           + `était dû le ${fmtDate(p.date_echeance)}. Veuillez régulariser votre situation.`,
+                    canal:            'App',
+                    statut_notification: 'Non_lu',
+                    urgent:           true,
+                    lien_action:      '/profil/',
+                }),
+            });
+
+            // Also increment relances_envoyees on the paiement
+            await apiFetch(`/paiements/${p.id}/`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    etudiant:          p.etudiant,
+                    montant_du:        parseFloat(p.montant_du),
+                    montant_paye:      parseFloat(p.montant_paye),
+                    mode_paiement:     p.mode_paiement,
+                    date_paiement:     p.date_paiement,
+                    reference_paiement: p.reference_paiement || null,
+                    statut_paiement:   p.statut_paiement,
+                    periode:           p.periode || null,
+                    date_echeance:     p.date_echeance || null,
+                    relances_envoyees: (p.relances_envoyees || 0) + 1,
+                    derniere_relance:  new Date().toISOString(),
+                }),
+            });
+        } catch (_) { /* silent */ }
+    }
+}
+
+/** Red dismissible banner at the top of the page */
+function showOverdueBanner(count) {
+    document.getElementById('overdue-banner')?.remove();
+    const banner = document.createElement('div');
+    banner.id = 'overdue-banner';
+    banner.style.cssText = `
+        position:fixed;top:0;left:0;right:0;z-index:8888;
+        background:linear-gradient(135deg,#dc2626,#b91c1c);
+        color:white;padding:12px 24px;
+        display:flex;align-items:center;justify-content:space-between;
+        font-size:0.9rem;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);`;
+    banner.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.2rem;">⚠️</span>
+            <span>
+                <strong>${count} paiement${count > 1 ? 's' : ''} en retard</strong>
+                détecté${count > 1 ? 's' : ''} ce mois-ci.
+                Les étudiants concernés ont été notifiés automatiquement.
+            </span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+            <button onclick="applyOverdueFilter()"
+                style="background:white;color:#dc2626;border:none;padding:6px 14px;
+                       border-radius:6px;cursor:pointer;font-weight:700;font-size:0.85rem;">
+                Voir les retards
+            </button>
+            <button onclick="document.getElementById('overdue-banner').remove()"
+                style="background:transparent;border:2px solid rgba(255,255,255,0.6);
+                       color:white;padding:6px 14px;border-radius:6px;cursor:pointer;
+                       font-weight:600;font-size:0.85rem;">
+                Ignorer
+            </button>
+        </div>`;
+    document.body.prepend(banner);
+    // Push content down so the banner doesn't hide the page header
+    document.body.style.paddingTop = '52px';
+}
+
+/** Filter the table to show only overdue rows */
+function applyOverdueFilter() {
+    document.getElementById('overdue-banner')?.remove();
+    document.body.style.paddingTop = '';
+
+    state.filtered = state.paiements.filter(p => state.overdueIds.has(p.id));
+    updateSummaryCards(state.filtered);
+    renderTable(state.filtered);
+    showToast(`${state.overdueIds.size} paiement(s) en retard affiché(s).`, 'warning');
+}
+
+/** True if a paiement is overdue (due date passed, not fully paid) */
+function isOverdue(p) {
+    if (p.statut_paiement === 'Paye') return false;
+    if (!p.date_echeance) return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const due   = new Date(p.date_echeance); due.setHours(0,0,0,0);
+    return due < today;
 }
 
 // ============================================================
@@ -205,43 +336,90 @@ async function loadPaiements() {
 
     state.paiements = Array.isArray(data) ? data : (data.results || []);
     state.filtered  = [...state.paiements];
+
     updateSummaryCards(state.paiements);
     renderTable(state.paiements);
+
+    // Run overdue check after data is loaded
+    await checkAndNotifyOverdue(state.paiements);
+    // Re-render so overdue rows get their styling
+    renderTable(state.filtered);
 }
 
 // ============================================================
-// SUMMARY CARDS
+// SUMMARY CARDS  (FIXED: includes salary expenses)
 // ============================================================
-function updateSummaryCards(paiements) {
-    const totalPaye  = paiements
-        .reduce((s, p) => s + parseFloat(p.montant_paye || 0), 0);
+async function updateSummaryCards(paiements) {
+    const totalPaye  = paiements.reduce((s, p) => s + parseFloat(p.montant_paye || 0), 0);
     const totalReste = paiements
         .filter(p => p.statut_paiement !== 'Paye')
         .reduce((s, p) => s + parseFloat(p.solde || 0), 0);
-    const retards    = paiements.filter(p => p.statut_paiement === 'Impaye').length;
+    const retards    = paiements.filter(p => isOverdue(p)).length;
 
-    // Summary cards (3 big ones)
     const cards = document.querySelectorAll('.summary-card .amount-large');
     if (cards[0]) cards[0].textContent = fmtDA(totalPaye);
     if (cards[1]) cards[1].textContent = fmtDA(totalReste);
-    if (cards[2]) cards[2].textContent = retards;
+    if (cards[2]) {
+        cards[2].textContent = retards;
+        // Color the retard card red when there are overdue payments
+        const retardCard = cards[2].closest('.summary-card');
+        if (retardCard && retards > 0) {
+            retardCard.style.borderLeft = '4px solid #dc2626';
+        }
+    }
 
     // Stat boxes
-    const statPs = document.querySelectorAll('.stat-box p');
-    const complets   = paiements.filter(p => p.statut_paiement === 'Paye').length;
-    const partiels   = paiements.filter(p => p.statut_paiement === 'Partiellement_paye').length;
-    const impayes    = paiements.filter(p => p.statut_paiement === 'Impaye').length;
-    const total      = paiements.length || 1;
-    const taux       = Math.round((complets / total) * 100);
+    const statPs   = document.querySelectorAll('.stat-box p');
+    const complets = paiements.filter(p => p.statut_paiement === 'Paye').length;
+    const partiels = paiements.filter(p => p.statut_paiement === 'Partiellement_paye').length;
+    const impayes  = paiements.filter(p => p.statut_paiement === 'Impaye').length;
+    const total    = paiements.length || 1;
+    const taux     = Math.round((complets / total) * 100);
 
     if (statPs[0]) statPs[0].textContent = complets;
     if (statPs[1]) statPs[1].textContent = partiels;
     if (statPs[2]) statPs[2].textContent = impayes;
     if (statPs[3]) statPs[3].textContent = taux + '%';
+
+    // ── FIXED: load salary expenses and inject into dashboard ──────────────
+    loadSalaryExpenses();
+}
+
+/**
+ * Fetch bulletins salaire and push the total into any element that has
+ * id="total-salaires" or class="salaires-montant" on the page.
+ * Works on both the paiements page AND the secretariat dashboard.
+ */
+async function loadSalaryExpenses() {
+    const targets = [
+        ...document.querySelectorAll('#total-salaires, .salaires-montant, [data-salaires]')
+    ];
+    if (!targets.length) return; // no slot on this page — skip
+
+    const data = await apiFetch('/bulletins/');
+    if (data?.error) return;
+
+    const bulletins = Array.isArray(data) ? data : (data.results || []);
+    const totalNet  = bulletins.reduce((s, b) => s + parseFloat(b.salaire_net || 0), 0);
+    const totalBrut = bulletins.reduce((s, b) => s + parseFloat(b.salaire_brut || 0), 0);
+
+    targets.forEach(el => {
+        el.textContent = fmtDA(totalNet);
+        el.title       = `Brut: ${fmtDA(totalBrut)}`;
+    });
+
+    // Also update a solde/bénéfice element if present
+    const soldeEls = document.querySelectorAll('#solde-net, .solde-net, [data-solde]');
+    const totalRevenu = state.paiements.reduce((s, p) => s + parseFloat(p.montant_paye || 0), 0);
+    soldeEls.forEach(el => {
+        const solde = totalRevenu - totalNet;
+        el.textContent = fmtDA(solde);
+        el.style.color = solde >= 0 ? '#059669' : '#dc2626';
+    });
 }
 
 // ============================================================
-// RENDER TABLE
+// RENDER TABLE  (FIXED: overdue rows highlighted)
 // ============================================================
 function renderTable(paiements) {
     const tbody = document.querySelector('tbody');
@@ -261,11 +439,35 @@ function renderTable(paiements) {
 
     tbody.innerHTML = paiements.map(p => {
         const nomEtudiant = p.etudiant_nom || '—';
-        const groupe      = '—'; // not in PaiementSerializer, shown separately
         const solde       = parseFloat(p.solde || 0);
         const isPaye      = p.statut_paiement === 'Paye';
+        const overdue     = isOverdue(p) || state.overdueIds.has(p.id);
 
-        // Action buttons based on status
+        // Row styling: red-tinted background for overdue
+        const rowStyle = overdue
+            ? 'background:rgba(220,38,38,0.06);border-left:4px solid #dc2626;'
+            : '';
+
+        // Overdue badge appended next to student name
+        const overdueBadge = overdue
+            ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;
+                background:#fef2f2;color:#dc2626;border:1px solid #fecaca;
+                border-radius:10px;font-size:0.72rem;font-weight:700;vertical-align:middle;">
+                ⏰ En retard
+               </span>`
+            : '';
+
+        // Days overdue
+        let daysOverdueLabel = '';
+        if (overdue && p.date_echeance) {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const due   = new Date(p.date_echeance); due.setHours(0,0,0,0);
+            const days  = Math.round((today - due) / 86400000);
+            daysOverdueLabel = `<div style="font-size:0.72rem;color:#dc2626;margin-top:2px;">
+                ${days} jour${days>1?'s':''} de retard
+            </div>`;
+        }
+
         let actionBtn = '';
         if (isPaye) {
             actionBtn = `<button class="action-btn validate" onclick="openModalRecu(${p.id})"
@@ -275,28 +477,43 @@ function renderTable(paiements) {
         } else {
             actionBtn = `
                 <button class="action-btn remind" onclick="relancerPaiement(${p.id})"
-                    title="Envoyer une relance">
+                    title="Envoyer une relance"
+                    style="${overdue ? 'background:#dc2626;color:white;border:none;' : ''}">
                     <i class="fas fa-bell"></i> Relancer
                 </button>
                 <button class="action-btn validate" onclick="openModalModifier(${p.id})"
-                    title="Enregistrer un paiement" style="background:#059669;color:white;border:none;">
+                    title="Enregistrer un paiement"
+                    style="background:#059669;color:white;border:none;">
                     <i class="fas fa-money-bill"></i> Payer
                 </button>`;
         }
 
         return `
-        <tr data-id="${p.id}">
+        <tr data-id="${p.id}" style="${rowStyle}">
             <td>
-                <div style="font-weight:600;">${nomEtudiant}</div>
+                <div style="font-weight:600;">${nomEtudiant}${overdueBadge}</div>
                 <div style="font-size:0.8rem;color:#64748b;">${p.periode || '—'}</div>
+                ${daysOverdueLabel}
             </td>
             <td>${p.periode || '—'}</td>
             <td class="amount">${fmtDA(p.montant_du)}</td>
             <td class="amount paid">${fmtDA(p.montant_paye)}</td>
             <td class="${solde > 0 ? 'amount unpaid' : ''}">${solde > 0 ? fmtDA(solde) : '—'}</td>
             <td>${modeLabel(p.mode_paiement)}</td>
-            <td>${fmtDate(p.date_paiement)}</td>
-            <td>${statutBadge(p.statut_paiement)}</td>
+            <td>
+                ${fmtDate(p.date_paiement)}
+                ${p.date_echeance && !isPaye
+                    ? `<div style="font-size:0.75rem;color:${overdue?'#dc2626':'#64748b'};">
+                        Échéance: ${fmtDate(p.date_echeance)}
+                       </div>`
+                    : ''}
+            </td>
+            <td>
+                ${statutBadge(p.statut_paiement)}
+                ${overdue ? `<br><span style="font-size:0.72rem;color:#dc2626;font-weight:700;">
+                    ⏰ En retard
+                </span>` : ''}
+            </td>
             <td style="white-space:nowrap;">
                 ${actionBtn}
                 <button class="action-btn" onclick="openModalDetails(${p.id})"
@@ -340,19 +557,35 @@ function applyFilters() {
 function openModalDetails(paiementId) {
     const p = state.paiements.find(x => x.id === paiementId);
     if (!p) return;
+    const overdue = isOverdue(p) || state.overdueIds.has(p.id);
 
     removeModal('modal-details');
     const modal = createShell('modal-details');
     modal.innerHTML = `
         <div style="background:white;border-radius:16px;padding:2rem;width:90%;max-width:480px;
-                    max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
+                    max-height:90vh;overflow-y:auto;
+                    ${overdue ? 'border-top:4px solid #dc2626;' : ''}"
+             onclick="event.stopPropagation()">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
                 <h3 style="margin:0;font-size:1.1rem;">
                     <i class="fas fa-file-invoice" style="color:#6366f1;margin-right:8px;"></i>Détail Paiement
+                    ${overdue ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:8px;font-size:0.75rem;margin-left:8px;">⏰ En retard</span>' : ''}
                 </h3>
                 <button onclick="removeModal('modal-details')"
                     style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:#94a3b8;">&times;</button>
             </div>
+
+            ${overdue ? `
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;
+                        padding:0.875rem;margin-bottom:1.25rem;">
+                <div style="color:#dc2626;font-weight:700;font-size:0.875rem;margin-bottom:4px;">
+                    ⏰ Paiement en retard
+                </div>
+                <div style="color:#7f1d1d;font-size:0.825rem;">
+                    Échéance dépassée depuis le ${fmtDate(p.date_echeance)}.
+                    L'étudiant a été notifié automatiquement.
+                </div>
+            </div>` : ''}
 
             <div style="display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1.5rem;">
                 ${[
@@ -363,8 +596,8 @@ function openModalDetails(paiementId) {
                     ['🔴', 'Reste',       parseFloat(p.solde||0) > 0 ? fmtDA(p.solde) : '—'],
                     ['💳', 'Mode',        modeLabel(p.mode_paiement)],
                     ['🗓', 'Date paiement',fmtDate(p.date_paiement)],
-                    ['📋', 'Référence',   p.reference_paiement || '—'],
                     ['📆', 'Échéance',    fmtDate(p.date_echeance)],
+                    ['📋', 'Référence',   p.reference_paiement || '—'],
                     ['🔔', 'Relances',    p.relances_envoyees || 0],
                 ].map(([ic, lb, v]) => `
                     <div style="display:flex;justify-content:space-between;align-items:center;
@@ -544,7 +777,6 @@ async function openModalModifier(paiementId) {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
         btn.disabled  = true;
 
-        // Total paid = previous amount + new amount (capped at montant_du)
         const totalPaye = Math.min(
             parseFloat(p.montant_paye || 0) + montantPayeNouveau,
             parseFloat(p.montant_du)
@@ -574,7 +806,11 @@ async function openModalModifier(paiementId) {
             btn.disabled = false; return;
         }
 
-        // Update local state
+        // Remove from overdue set if now paid
+        if (result.statut_paiement === 'Paye') {
+            state.overdueIds.delete(paiementId);
+        }
+
         const idx = state.paiements.findIndex(x => x.id === paiementId);
         if (idx !== -1) state.paiements[idx] = result;
         state.filtered = [...state.paiements];
@@ -651,7 +887,7 @@ async function openModalNouveauPaiement() {
                         <input id="n_periode" type="text" placeholder="Mars 2025" style="${inp()}">
                     </div>
                     <div>
-                        <label style="${lbl()}">Date d'échéance</label>
+                        <label style="${lbl()}">Date d'échéance *</label>
                         <input id="n_echeance" type="date" style="${inp()}">
                     </div>
                 </div>
@@ -701,6 +937,7 @@ async function openModalNouveauPaiement() {
         if (isNaN(du) || du <= 0) { errEl.textContent = 'Montant dû invalide.'; errEl.style.display='block'; return; }
         if (isNaN(paye) || paye < 0) { errEl.textContent = 'Montant payé invalide.'; errEl.style.display='block'; return; }
         if (!date) { errEl.textContent = 'Date obligatoire.'; errEl.style.display='block'; return; }
+        if (!echeance) { errEl.textContent = 'La date d\'échéance est obligatoire pour détecter les retards.'; errEl.style.display='block'; return; }
 
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement...';
         btn.disabled  = true;
@@ -736,7 +973,7 @@ async function openModalNouveauPaiement() {
 }
 
 // ============================================================
-// MODAL — REÇU (print-friendly)
+// MODAL — REÇU
 // ============================================================
 function openModalRecu(paiementId) {
     const p = state.paiements.find(x => x.id === paiementId);
@@ -747,7 +984,6 @@ function openModalRecu(paiementId) {
     modal.innerHTML = `
         <div id="recu-content" style="background:white;border-radius:16px;padding:2rem;
                     width:90%;max-width:460px;" onclick="event.stopPropagation()">
-            <!-- Header reçu -->
             <div style="text-align:center;margin-bottom:1.5rem;padding-bottom:1rem;
                         border-bottom:2px dashed #e2e8f0;">
                 <i class="fas fa-graduation-cap" style="font-size:2rem;color:#6366f1;"></i>
@@ -756,13 +992,11 @@ function openModalRecu(paiementId) {
                 <p style="font-size:0.75rem;color:#94a3b8;">REÇU DE PAIEMENT</p>
             </div>
 
-            <!-- Référence -->
             <div style="display:flex;justify-content:space-between;margin-bottom:1rem;">
                 <span style="font-size:0.8rem;color:#64748b;">N° Reçu</span>
                 <strong style="font-size:0.8rem;">#PAY${String(p.id).padStart(5,'0')}</strong>
             </div>
 
-            <!-- Corps reçu -->
             <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1.5rem;">
                 ${[
                     ['Étudiant',    p.etudiant_nom || '—'],
@@ -780,7 +1014,6 @@ function openModalRecu(paiementId) {
                     </div>`).join('')}
             </div>
 
-            <!-- Total -->
             <div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-radius:10px;
                         padding:1rem;text-align:center;margin-bottom:1.5rem;">
                 <p style="font-size:0.8rem;color:#065f46;margin-bottom:4px;">Montant Total Payé</p>
@@ -808,7 +1041,7 @@ function openModalRecu(paiementId) {
 }
 
 // ============================================================
-// RELANCER PAIEMENT (send reminder notification)
+// RELANCER PAIEMENT
 // ============================================================
 async function relancerPaiement(paiementId) {
     const p = state.paiements.find(x => x.id === paiementId);
@@ -817,7 +1050,6 @@ async function relancerPaiement(paiementId) {
 
     if (!confirm(`Envoyer une relance de paiement à ${nom} ?`)) return;
 
-    // Increment relances_envoyees on the paiement record
     const result = await apiFetch(`/paiements/${paiementId}/`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -839,7 +1071,22 @@ async function relancerPaiement(paiementId) {
         showToast('Erreur relance: ' + result.message, 'error'); return;
     }
 
-    // Update local state
+    // Also push a notification to the student
+    await apiFetch('/notifications/', {
+        method: 'POST',
+        body: JSON.stringify({
+            utilisateur:      p.etudiant,
+            type_notification:'Paiement',
+            titre:            '🔔 Rappel de paiement',
+            contenu: `Rappel : votre paiement de ${fmtDA(p.montant_du)} (${p.periode || '—'}) `
+                   + `n'a pas encore été réglé. Merci de vous mettre à jour.`,
+            canal:            'App',
+            statut_notification: 'Non_lu',
+            urgent:           false,
+            lien_action:      '/profil/',
+        }),
+    });
+
     const idx = state.paiements.findIndex(x => x.id === paiementId);
     if (idx !== -1) state.paiements[idx] = result;
 
@@ -853,7 +1100,7 @@ async function relancerPaiement(paiementId) {
 function exportCSV() {
     if (!state.filtered.length) { showToast('Aucune donnée à exporter.', 'warning'); return; }
     const headers = ['ID','Étudiant','Période','Montant dû (DA)','Montant payé (DA)',
-                     'Solde (DA)','Mode','Date paiement','Référence','Statut','Relances'];
+                     'Solde (DA)','Mode','Date paiement','Échéance','Référence','Statut','Retard','Relances'];
     const rows = state.filtered.map(p => [
         p.id,
         p.etudiant_nom || '',
@@ -863,8 +1110,10 @@ function exportCSV() {
         p.solde || '',
         modeLabel(p.mode_paiement),
         p.date_paiement || '',
+        p.date_echeance || '',
         p.reference_paiement || '',
         p.statut_paiement || '',
+        isOverdue(p) ? 'Oui' : 'Non',
         p.relances_envoyees || 0,
     ]);
     const csv  = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
@@ -889,7 +1138,7 @@ function createShell(id) {
 function removeModal(id) { document.getElementById(id)?.remove(); }
 
 // ============================================================
-// INJECT PRINT STYLE (for reçu)
+// INJECT STYLES
 // ============================================================
 function injectStyles() {
     if (document.getElementById('pay-styles')) return;
@@ -903,9 +1152,15 @@ function injectStyles() {
         }
         @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
         tbody tr { animation: fadeIn 0.2s ease both; }
-        tbody tr:hover { background: #f8fafc; }
+        tbody tr:not([style*="background"]):hover { background: #f8fafc; }
         .action-btn { cursor: pointer; transition: all 0.15s; }
-        .action-btn:hover { transform: translateY(-1px); opacity: 0.9; }`;
+        .action-btn:hover { transform: translateY(-1px); opacity: 0.9; }
+        /* Overdue row pulse on first load */
+        @keyframes overdueFlash {
+            0%,100% { background: rgba(220,38,38,0.06); }
+            50%      { background: rgba(220,38,38,0.14); }
+        }
+        tr[data-overdue] { animation: overdueFlash 2s ease 3; }`;
     document.head.appendChild(s);
 }
 
@@ -913,11 +1168,9 @@ function injectStyles() {
 // SETUP EVENTS
 // ============================================================
 function setupEvents() {
-    // "Enregistrer un paiement" button
     document.querySelector('.btn-success, .btn.btn-success')
         ?.addEventListener('click', openModalNouveauPaiement);
 
-    // Search
     const searchInput = document.querySelector('.search-box input');
     if (searchInput) {
         let tmr;
@@ -927,13 +1180,25 @@ function setupEvents() {
         });
     }
 
-    // Filters — 3 selects: statut | periode | mode
     const selects = document.querySelectorAll('.filter-select');
 
     if (selects[0]) {
         selects[0].addEventListener('change', e => {
-            const map = { 'Payé':'Paye', 'Partiel':'Partiellement_paye', 'Impayé':'Impaye' };
-            state.filterStatut = map[e.target.value] || 'all';
+            const map = {
+                'Payé':    'Paye',
+                'Partiel': 'Partiellement_paye',
+                'Impayé':  'Impaye',
+                'En retard': '__overdue__',
+            };
+            const val = map[e.target.value];
+            if (val === '__overdue__') {
+                // Special pseudo-filter: show only overdue
+                state.filtered = state.paiements.filter(p => isOverdue(p));
+                updateSummaryCards(state.filtered);
+                renderTable(state.filtered);
+                return;
+            }
+            state.filterStatut = val || 'all';
             applyFilters();
         });
     }
@@ -941,7 +1206,6 @@ function setupEvents() {
         selects[1].addEventListener('change', e => {
             const v = e.target.value;
             state.filterPeriode = (v === 'Ce mois' || v === 'Mois dernier' || v === 'Cette année') ? v : 'all';
-            // Simple text match — server-side filtering would be better for large datasets
             applyFilters();
         });
     }
@@ -964,6 +1228,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     injectStyles();
     setupEvents();
 
-    // Load etudiants in background, paiements immediately
     await Promise.all([loadPaiements(), loadEtudiants()]);
 });

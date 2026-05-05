@@ -817,39 +817,20 @@ async function confirmAnnulation(planningId, planning, groupe, enseignant, ensUs
         body:   JSON.stringify(seancePayload),
     });
 
+    // ✅ FIX FINAL: On ne touche JAMAIS au Planning lui-même
+    // Le Planning reste actif pour toutes les autres semaines/récurrences
+    // Seule la Seance du jour spécifique est annulée en DB
     if (!seanceResult?.error) {
         saved = true;
-        console.log('[confirmAnnulation] Séance créée:', seanceResult);
+        console.log('[confirmAnnulation] Séance annulée créée en DB:', seanceResult);
     } else {
-        console.warn('[confirmAnnulation] /seances/ échoué:', seanceResult.message);
-
-        // ── Stratégie B fallback : PATCH le planning ─────────
-        // (annule toutes les récurrences, pas juste cette semaine)
-        const patchResult = await apiFetch(`/plannings/${planningId}/`, {
-            method: 'PATCH',
-            body:   JSON.stringify({
-                statut_planning: 'Annule',
-                notes_planning:  notes,
-            }),
-        });
-
-        if (!patchResult?.error) {
-            saved = true;
-            // Mettre à jour l'état local du planning
-            const idx = state.plannings.findIndex(p => p.id === planningId);
-            if (idx !== -1) {
-                state.plannings[idx].statut_planning = 'Annule';
-                state.plannings[idx].notes_planning  = notes;
-            }
-            console.log('[confirmAnnulation] Planning patché comme annulé.');
-        } else {
-            console.error('[confirmAnnulation] PATCH aussi échoué:', patchResult.message);
-            errEl.textContent = `❌ Échec sauvegarde : ${patchResult.message}`;
-            errEl.style.display = 'block';
-            btn.innerHTML = '<i class="fas fa-ban"></i> Confirmer l\'annulation';
-            btn.disabled  = false;
-            return;
-        }
+        // /seances/ a échoué (endpoint manquant ou erreur validation)
+        console.error('[confirmAnnulation] POST /seances/ échoué:', seanceResult.message);
+        errEl.textContent = `❌ Impossible de sauvegarder : ${seanceResult.message}`;
+        errEl.style.display = 'block';
+        btn.innerHTML = '<i class="fas fa-ban"></i> Confirmer l\'annulation';
+        btn.disabled  = false;
+        return;
     }
 
     // Marquer localement pour l'affichage calendrier
@@ -1310,6 +1291,32 @@ async function openNewSessionModal() {
 }
 
 // ============================================================
+// CHARGER LES SÉANCES ANNULÉES DEPUIS LA DB
+// Appelé au chargement → repeupler state.cancelledSeances
+// pour que les cartes affichent "ANNULÉ" après refresh
+// ============================================================
+async function loadCancelledSeances() {
+    const data = await apiFetch('/seances/?statut_seance=Annulee');
+    if (data?.error) {
+        console.warn('[loadCancelledSeances] Erreur:', data.message);
+        return;
+    }
+    const seances = Array.isArray(data) ? data : (data.results || []);
+    seances.forEach(s => {
+        if (s.planning && s.date_seance) {
+            const key = `${s.planning}_${s.date_seance}`;
+            state.cancelledSeances[key] = {
+                planningId:  s.planning,
+                dateSeance:  s.date_seance,
+                motif:       s.description || 'Annulée',
+                seanceId:    s.id,
+            };
+        }
+    });
+    console.log(`[loadCancelledSeances] ${seances.length} séance(s) annulée(s) chargée(s)`);
+}
+
+// ============================================================
 // DELETE
 // ============================================================
 async function deletePlanning(id) {
@@ -1352,6 +1359,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         openNewSessionModal();
     });
 
-    await Promise.all([loadGroupes(), loadEnseignants(), loadPlannings()]);
+    // ✅ Charger aussi les séances annulées pour restaurer l'affichage après refresh
+    await Promise.all([loadGroupes(), loadEnseignants(), loadPlannings(), loadCancelledSeances()]);
     renderCalendar();
 });

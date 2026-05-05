@@ -1,7 +1,7 @@
 /**
  * Gestion des Étudiants - Secrétariat
  * JWT Authentication + Django REST API
- * FIXED: Parent display uses flat fields (parent_id, parent_nom, parent_email, parent_tel)
+ * FIXED: Language selector filters group dropdown in new student modal
  * File: static/js/Gestion_Etd.js
  */
 
@@ -183,10 +183,10 @@ async function loadGroupes() {
 function updateStats(etudiants) {
     const cards = document.querySelectorAll('.stat-content h3');
     if (!cards.length) return;
-    const total    = etudiants.length;
-    const actifs   = etudiants.filter(e => e.statut_etudiant === 'Actif').length;
+    const total     = etudiants.length;
+    const actifs    = etudiants.filter(e => e.statut_etudiant === 'Actif').length;
     const suspendus = etudiants.filter(e => e.statut_etudiant === 'Suspendu').length;
-    const c1       = etudiants.filter(e => e.niveau_actuel === 'C1').length;
+    const c1        = etudiants.filter(e => e.niveau_actuel === 'C1').length;
     if (cards[0]) cards[0].textContent = total;
     if (cards[1]) cards[1].textContent = actifs;
     if (cards[2]) cards[2].textContent = suspendus;
@@ -194,7 +194,7 @@ function updateStats(etudiants) {
 }
 
 // ============================================================
-// DROPDOWN LANGUES
+// DROPDOWN LANGUES (filtre principal page)
 // ============================================================
 function fillLangueDropdown(etudiants) {
     const select = document.querySelectorAll('.filter-select')[1];
@@ -241,7 +241,6 @@ function renderGrid(etudiants) {
         const age        = calculateAge(e.date_naissance);
         const isMinor    = age !== null && age < 15;
 
-        // ✅ Utilise les champs plats du serializer corrigé
         const hasParent  = !!e.parent_id;
         const indicator  = (isMinor && !hasParent) ? '⚠️ ' : (hasParent ? '👤 ' : '');
 
@@ -352,7 +351,7 @@ function applyFilters() {
 }
 
 // ============================================================
-// MODAL DÉTAILS — FIXED: utilise les champs plats du serializer
+// MODAL DÉTAILS
 // ============================================================
 async function openModalDetails(etudiantId) {
     const etudiant = state.etudiants.find(e => e.id === etudiantId);
@@ -365,7 +364,6 @@ async function openModalDetails(etudiantId) {
     const age        = calculateAge(etudiant.date_naissance);
     const isMinor    = age !== null && age < 15;
 
-    // ✅ Lecture directe des champs plats — pas de fetch supplémentaire
     const parentId       = etudiant.parent_id;
     const parentNom      = etudiant.parent_nom;
     const parentEmail    = etudiant.parent_email;
@@ -373,7 +371,6 @@ async function openModalDetails(etudiantId) {
     const parentRelation = etudiant.parent_relation || 'Tuteur';
     const hasParent      = !!parentId;
 
-    // Charger notes, absences, paiements
     const [notes, absences, paiements] = await Promise.all([
         apiFetch(`/notes/?etudiant=${etudiantId}`),
         apiFetch(`/absences/?etudiant=${etudiantId}`),
@@ -394,7 +391,6 @@ async function openModalDetails(etudiantId) {
         paiementInfo = `${emoji} ${label} — ${new Intl.NumberFormat('fr-DZ').format(latest.montant_paye)} DA`;
     }
 
-    // ── SECTION PARENT ────────────────────────────────────────
     let parentSectionHTML = '';
 
     if (hasParent) {
@@ -454,7 +450,6 @@ async function openModalDetails(etudiantId) {
             </div>`;
     }
 
-    // ── MODAL ─────────────────────────────────────────────────
     const modal = document.createElement('div');
     modal.id = `modalDetails-${etudiantId}`;
     modal.style.cssText = `position:fixed; inset:0; background:rgba(0,0,0,0.5);
@@ -464,7 +459,6 @@ async function openModalDetails(etudiantId) {
         <div style="background:white; border-radius:20px; width:90%; max-width:560px;
                     max-height:90vh; overflow-y:auto; animation:fadeIn 0.3s ease;"
              onclick="event.stopPropagation()">
-            <!-- Header -->
             <div style="background:${cardGradient(etudiantId % 8)};
                         padding:2rem; border-radius:20px 20px 0 0;
                         color:white; display:flex; justify-content:space-between; align-items:flex-start;">
@@ -493,7 +487,6 @@ async function openModalDetails(etudiantId) {
             </div>
 
             <div style="padding:1.5rem;">
-                <!-- KPIs -->
                 <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-bottom:1.5rem;">
                     ${[['📊', moyenne, 'Moyenne'], ['📅', nbAbsences, 'Absences'], ['📝', nbNotes, 'Évals']].map(
                         ([icon, val, label]) => `
@@ -504,7 +497,6 @@ async function openModalDetails(etudiantId) {
                         </div>`).join('')}
                 </div>
 
-                <!-- Infos -->
                 <div style="display:flex; flex-direction:column; gap:0.75rem;">
                     ${[
                         ['👤', 'Email',       etudiant.user?.email || '—'],
@@ -527,10 +519,8 @@ async function openModalDetails(etudiantId) {
                         </div>`).join('')}
                 </div>
 
-                <!-- Section Parent -->
                 ${parentSectionHTML}
 
-                <!-- Actions -->
                 <div style="display:flex; gap:1rem; margin-top:1.5rem;">
                     <button onclick="openModalModifier(${etudiantId}); document.getElementById('modalDetails-${etudiantId}')?.remove();"
                             style="flex:1; padding:0.875rem; border:none; border-radius:10px;
@@ -664,10 +654,18 @@ async function openModalModifier(etudiantId) {
 }
 
 // ============================================================
-// MODAL NOUVEL ÉTUDIANT — auto parent si âge < 15
+// MODAL NOUVEL ÉTUDIANT — avec sélecteur langue → groupes filtrés
 // ============================================================
 function openModalNouvelEtudiant() {
     document.getElementById('modalNouvelEtudiant')?.remove();
+
+    // Build unique sorted language list from loaded groups
+    const langues = [...new Set(
+        state.groupes
+            .filter(g => g.statut_groupe === 'Actif')
+            .map(g => g.langue)
+            .filter(Boolean)
+    )].sort();
 
     const modal = document.createElement('div');
     modal.id = 'modalNouvelEtudiant';
@@ -678,6 +676,8 @@ function openModalNouvelEtudiant() {
         <div style="background:white; border-radius:16px; padding:24px;
                     width:100%; max-width:600px; max-height:90vh; overflow-y:auto;
                     box-shadow:0 25px 50px rgba(0,0,0,0.3);">
+
+            <!-- Header -->
             <div style="display:flex; justify-content:space-between; align-items:center;
                         margin-bottom:20px; border-bottom:2px solid #e5e7eb; padding-bottom:15px;">
                 <h2 style="margin:0; color:#1f2937; font-size:1.4rem;">
@@ -690,13 +690,16 @@ function openModalNouvelEtudiant() {
             </div>
 
             <form id="formNouvelEtudiant">
-                <!-- Infos étudiant -->
+
+                <!-- ── Infos étudiant ── -->
                 <div style="background:#f9fafb; padding:16px; border-radius:12px;
                             margin-bottom:16px; border:1px solid #e5e7eb;">
                     <h4 style="margin:0 0 15px 0; color:#374151;">
                         <i class="fas fa-user-graduate" style="color:#4f46e5;"></i>
                         Informations de l'étudiant
                     </h4>
+
+                    <!-- Prénom / Nom -->
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                         <div>
                             <label style="${lbl()}">Prénom <span style="color:red;">*</span></label>
@@ -707,13 +710,17 @@ function openModalNouvelEtudiant() {
                             <input type="text" id="new_nom" required placeholder="Benali" style="${inp()}">
                         </div>
                     </div>
+
+                    <!-- Email -->
                     <div style="margin-bottom:12px;">
                         <label style="${lbl()}">Email <span style="color:red;">*</span></label>
                         <input type="email" id="new_email" required placeholder="ahmed@email.com" style="${inp()}">
                     </div>
+
+                    <!-- Téléphone / Date naissance -->
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                         <div>
-                            <label style="${lbl()}">Téléphone *</label>
+                            <label style="${lbl()}">Téléphone <span style="color:red;">*</span></label>
                             <input type="tel" id="new_tel" required placeholder="0555 12 34 56" style="${inp()}">
                         </div>
                         <div>
@@ -721,24 +728,40 @@ function openModalNouvelEtudiant() {
                             <input type="date" id="new_naissance" required style="${inp()}">
                         </div>
                     </div>
+
+                    <!-- ── Langue → Groupe (cascaded) ── -->
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                         <div>
-                            <label style="${lbl()}">Groupe</label>
-                            <select id="new_groupe" style="${inp()}">
-                                <option value="">-- Aucun --</option>
-                                ${state.groupes.map(g =>
-                                    `<option value="${g.id}">${g.nom_groupe} — ${g.niveau}</option>`
-                                ).join('')}
+                            <label style="${lbl()}">
+                                <i class="fas fa-language" style="color:#4f46e5; margin-right:4px;"></i>
+                                Langue
+                            </label>
+                            <select id="new_langue" style="${inp()}">
+                                <option value="">-- Choisir une langue --</option>
+                                ${langues.map(l => `<option value="${l}">${l}</option>`).join('')}
                             </select>
                         </div>
                         <div>
-                            <label style="${lbl()}">Niveau</label>
-                            <select id="new_niveau" style="${inp()}">
-                                ${['A1','A2','B1','B2','C1'].map(n =>
-                                    `<option value="${n}">${niveauLabel(n)}</option>`).join('')}
+                            <label style="${lbl()}">
+                                <i class="fas fa-users" style="color:#4f46e5; margin-right:4px;"></i>
+                                Groupe
+                            </label>
+                            <select id="new_groupe" style="${inp()}" disabled>
+                                <option value="">-- Sélectionnez d'abord une langue --</option>
                             </select>
                         </div>
                     </div>
+
+                    <!-- Niveau -->
+                    <div style="margin-bottom:12px;">
+                        <label style="${lbl()}">Niveau initial</label>
+                        <select id="new_niveau" style="${inp()}">
+                            ${['A1','A2','B1','B2','C1'].map(n =>
+                                `<option value="${n}">${niveauLabel(n)}</option>`).join('')}
+                        </select>
+                    </div>
+
+                    <!-- Mot de passe -->
                     <div>
                         <label style="${lbl()}">Mot de passe <span style="color:red;">*</span></label>
                         <input type="password" id="new_pwd" required minlength="6"
@@ -746,15 +769,15 @@ function openModalNouvelEtudiant() {
                     </div>
                 </div>
 
-                <!-- Alerte mineur -->
+                <!-- ── Alerte mineur ── -->
                 <div id="ageAlert" style="display:none; padding:12px; background:#fef3c7;
                      border:1px solid #f59e0b; border-radius:8px; color:#92400e;
                      margin-bottom:16px; font-size:0.9rem;">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <strong>Étudiant mineur (< 15 ans)</strong> — Informations parent obligatoires
+                    <strong>Étudiant mineur (&lt; 15 ans)</strong> — Informations parent obligatoires
                 </div>
 
-                <!-- Infos parent (affiché si âge < 15) -->
+                <!-- ── Section parent (si âge < 15) ── -->
                 <div id="parentSection" style="display:none; background:#eff6ff;
                      padding:16px; border-radius:12px; margin-bottom:16px; border:2px solid #3b82f6;">
                     <h4 style="margin:0 0 15px 0; color:#1e40af;">
@@ -792,6 +815,7 @@ function openModalNouvelEtudiant() {
                     </div>
                 </div>
 
+                <!-- Submit -->
                 <button type="submit" id="btnSubmit" style="width:100%; padding:14px; border:none;
                     border-radius:10px; background:linear-gradient(135deg,#4f46e5,#7c3aed);
                     color:white; font-weight:700; font-size:1.1rem; cursor:pointer;">
@@ -803,15 +827,62 @@ function openModalNouvelEtudiant() {
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-    // Afficher/cacher section parent selon l'âge
+    // ── Helper: refresh groupe options based on selected langue ──
+    function refreshGroupeOptions(langueVal) {
+        const groupeSelect = document.getElementById('new_groupe');
+        if (!groupeSelect) return;
+
+        if (!langueVal) {
+            groupeSelect.innerHTML = '<option value="">-- Sélectionnez d\'abord une langue --</option>';
+            groupeSelect.disabled  = true;
+            return;
+        }
+
+        const filtered = state.groupes.filter(g =>
+            g.langue === langueVal && g.statut_groupe === 'Actif'
+        );
+
+        if (!filtered.length) {
+            groupeSelect.innerHTML = '<option value="">Aucun groupe disponible pour cette langue</option>';
+            groupeSelect.disabled  = true;
+            return;
+        }
+
+        groupeSelect.disabled = false;
+        groupeSelect.innerHTML =
+            '<option value="">-- Choisir un groupe --</option>' +
+            filtered.map(g => {
+                const places = g.places_restantes ?? (g.capacite_max - g.nombre_etudiants);
+                const full   = places <= 0;
+                return `<option value="${g.id}" ${full ? 'disabled' : ''}>
+                    ${g.nom_groupe} — ${g.niveau} (${full ? 'Complet' : places + ' place' + (places > 1 ? 's' : '')})
+                </option>`;
+            }).join('');
+
+        // Auto-sync niveau to match group's niveau when one is selected
+        groupeSelect.addEventListener('change', function () {
+            const chosen = filtered.find(g => g.id === parseInt(this.value));
+            if (chosen?.niveau) {
+                const niveauSel = document.getElementById('new_niveau');
+                if (niveauSel) niveauSel.value = chosen.niveau;
+            }
+        });
+    }
+
+    // ── Langue change → filter groups ──
+    document.getElementById('new_langue')?.addEventListener('change', function () {
+        refreshGroupeOptions(this.value);
+    });
+
+    // ── Date naissance → show/hide parent section ──
     document.getElementById('new_naissance')?.addEventListener('change', function () {
-        const age = calculateAge(this.value);
+        const age       = calculateAge(this.value);
         const showParent = age !== null && age < 15;
         document.getElementById('parentSection').style.display = showParent ? 'block' : 'none';
         document.getElementById('ageAlert').style.display      = showParent ? 'block' : 'none';
     });
 
-    // Soumission
+    // ── Form submit ──
     document.getElementById('formNouvelEtudiant')?.addEventListener('submit', async e => {
         e.preventDefault();
 
@@ -820,6 +891,7 @@ function openModalNouvelEtudiant() {
         const email     = document.getElementById('new_email').value.trim();
         const tel       = document.getElementById('new_tel').value.trim();
         const naissance = document.getElementById('new_naissance').value;
+        const langue    = document.getElementById('new_langue').value;
         const groupe    = document.getElementById('new_groupe').value;
         const niveau    = document.getElementById('new_niveau').value;
         const pwd       = document.getElementById('new_pwd').value;
@@ -827,17 +899,26 @@ function openModalNouvelEtudiant() {
         const isMinor   = age !== null && age < 15;
 
         if (!prenom || !nom || !email || !tel || !naissance || !pwd) {
-            showToast('Remplissez tous les champs obligatoires.', 'warning'); return;
+            showToast('Remplissez tous les champs obligatoires.', 'warning');
+            return;
         }
         if (pwd.length < 6) {
-            showToast('Mot de passe minimum 6 caractères.', 'warning'); return;
+            showToast('Mot de passe minimum 6 caractères.', 'warning');
+            return;
+        }
+        if (langue && !groupe) {
+            showToast('Veuillez sélectionner un groupe pour la langue choisie.', 'warning');
+            return;
         }
 
         const payload = {
-            email, first_name: prenom, last_name: nom,
-            password: pwd, telephone: tel,
+            email,
+            first_name:     prenom,
+            last_name:      nom,
+            password:       pwd,
+            telephone:      tel,
             date_naissance: naissance,
-            id_groupe: groupe || null,
+            id_groupe:      groupe || null,
             niveau_initial: niveau,
         };
 
@@ -861,7 +942,7 @@ function openModalNouvelEtudiant() {
         }
 
         const btn = document.getElementById('btnSubmit');
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inscription...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inscription en cours...';
         btn.disabled  = true;
 
         const result = await apiFetch('/etudiants/', {
@@ -878,21 +959,24 @@ function openModalNouvelEtudiant() {
 
         modal.remove();
 
-        // Afficher le mot de passe généré pour le parent
         if (result.parent_auto_cree) {
             const info = result.parent_auto_cree;
             const msg  = [
                 '✅ Étudiant inscrit avec succès !',
                 '',
-                '👤 Compte parent créé :',
-                `Nom : ${info.nom}`,
-                `Email : ${info.email}`,
-                `Téléphone : ${info.telephone}`,
-                info.mot_de_passe_genere ? `\n🔑 Mot de passe : ${info.mot_de_passe_genere}` : '',
-                info.mot_de_passe_genere ? '⚠️ Notez ce mot de passe, il ne sera plus affiché !' : '',
+                '👤 Compte parent créé automatiquement :',
+                `Nom      : ${info.nom}`,
+                `Email    : ${info.email}`,
+                `Tél      : ${info.telephone}`,
+                info.mot_de_passe_genere
+                    ? `\n🔑 Mot de passe : ${info.mot_de_passe_genere}`
+                    : '',
+                info.mot_de_passe_genere
+                    ? '⚠️  Notez ce mot de passe, il ne sera plus affiché !'
+                    : '',
             ].filter(Boolean).join('\n');
             setTimeout(() => alert(msg), 100);
-            showToast('Étudiant et parent créés !', 'success');
+            showToast('Étudiant et parent créés avec succès !', 'success');
         } else {
             showToast(`${prenom} ${nom} inscrit(e) avec succès !`, 'success');
         }
@@ -968,6 +1052,7 @@ function injectStyles() {
         .payment-loading { color:#94a3b8; font-size:0.8rem; }
         .btn-action { transition:all 0.2s; }
         .btn-action:hover { transform:translateY(-1px); opacity:0.9; }
+        select:disabled { opacity:0.5; cursor:not-allowed; }
     `;
     document.head.appendChild(s);
 }

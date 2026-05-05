@@ -321,6 +321,362 @@ body {
     letter-spacing: 0.5px;
 }
 
+/* ============================================
+   DASHBOARD GRID (WIDGETS)
+   ============================================ */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 32px;
+    animation: fadeIn 0.6s ease 0.3s forwards;
+    opacity: 0;
+}
+
+.dashboard-col {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.widget {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-shadow);
+    overflow: hidden;
+    transition: all var(--transition-base);
+}
+
+.widget:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(99, 102, 241, 0.15);
+}
+
+.widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.widget-header h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.widget-header h3 svg {
+    color: var(--primary-light);
+    flex-shrink: 0;
+}
+
+.widget-link {
+    font-size: 13px;
+    color: var(--primary-light);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color var(--transition-fast);
+}
+
+.widget-link:hover {
+    color: var(--white);
+    text-decoration: underline;
+}
+
+.widget-body {
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.loading-state {
+    padding: 2rem;
+    text-align: center;
+    color: var(--gray-500);
+    font-size: 0.875rem;
+}
+
+.empty-state {
+    padding: 2rem;
+    text-align: center;
+    color: var(--gray-500);
+    font-size: 0.875rem;
+}
+
+/* Upcoming Classes */
+.upcoming-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background var(--transition-fast);
+}
+
+.upcoming-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.upcoming-item:last-child {
+    border-bottom: none;
+}
+
+.upcoming-time {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    border-radius: var(--radius);
+    flex-shrink: 0;
+}
+
+.upcoming-time .day {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.upcoming-time .month {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.9;
+    margin-top: 2px;
+}
+
+.upcoming-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.upcoming-info .group-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--white);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.upcoming-info .group-detail {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-top: 2px;
+}
+
+.upcoming-info .group-time {
+    font-size: 12px;
+    color: var(--primary-light);
+    margin-top: 2px;
+    font-weight: 500;
+}
+
+.upcoming-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    flex-shrink: 0;
+}
+
+.upcoming-badge.today {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-light);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.upcoming-badge.tomorrow {
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--primary-light);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.upcoming-badge.future {
+    background: rgba(148, 163, 184, 0.1);
+    color: var(--gray-400);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+/* Recent Notes */
+.note-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background var(--transition-fast);
+}
+
+.note-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.note-item:last-child {
+    border-bottom: none;
+}
+
+.note-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(135deg, var(--secondary), var(--secondary-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--white);
+    flex-shrink: 0;
+}
+
+.note-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.note-info .student-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--white);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.note-info .note-detail {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-top: 1px;
+}
+
+.note-score {
+    font-size: 16px;
+    font-weight: 700;
+    flex-shrink: 0;
+    min-width: 40px;
+    text-align: right;
+}
+
+.note-score.high { color: var(--success-light); }
+.note-score.medium { color: var(--warning-light); }
+.note-score.low { color: var(--danger-light); }
+
+/* Absence Alerts */
+.absence-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background var(--transition-fast);
+}
+
+.absence-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.absence-item:last-child {
+    border-bottom: none;
+}
+
+.absence-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    background: rgba(239, 68, 68, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.absence-icon svg {
+    color: var(--danger-light);
+}
+
+.absence-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.absence-info .student-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--white);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.absence-info .absence-detail {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-top: 1px;
+}
+
+.absence-count {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--danger-light);
+    background: rgba(239, 68, 68, 0.1);
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+    flex-shrink: 0;
+}
+
+/* Quick Actions */
+.quick-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 16px 20px;
+}
+
+.quick-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 18px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius);
+    color: var(--gray-300);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all var(--transition-base);
+    cursor: pointer;
+}
+
+.quick-action-btn:hover {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: rgba(99, 102, 241, 0.3);
+    color: var(--white);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.quick-action-btn svg {
+    color: var(--primary-light);
+    transition: color var(--transition-base);
+}
+
+.quick-action-btn:hover svg {
+    color: var(--white);
+}
+
 /* Animations */
 @keyframes fadeIn {
     from {
@@ -333,10 +689,31 @@ body {
     }
 }
 
+/* Scrollbar styling for widgets */
+.widget-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.widget-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.widget-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-full);
+}
+
+.widget-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+    .dashboard-grid {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -367,5 +744,13 @@ body {
 
     .stat-value {
         font-size: 36px;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-actions-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 }

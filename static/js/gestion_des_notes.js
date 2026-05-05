@@ -3,7 +3,12 @@
  * Compatible avec Django REST Framework + SimpleJWT
  * File: static/js/gestion_des_notes.js
  *
- * FIXED:
+ * FIXES:
+ *  - Group selector rendered at top of page; teacher picks a group first
+ *  - Real student count fetched live from /etudiants/?groupe=X (not stale cached field)
+ *  - Group picker styled with app gradient theme
+ *  - All data (students, evaluations, notes) scoped to selected group
+ *  - Evaluation creation always sends the currently selected groupeId
  *  - saveGrade: POST vs PATCH logic with DB lookup fallback
  *  - applyNotesToRow: matches by evaluationId (reliable)
  *  - calculateAndSendAll: PATCH moyenne_generale via setattr endpoint
@@ -15,10 +20,12 @@ class GradeManager {
     constructor() {
         this.apiBaseUrl = '/api';
 
-        this.students    = [];
-        this.evaluations = [];
-        this.notes       = [];
-        this.currentGroup = null;
+        this.students       = [];
+        this.evaluations    = [];
+        this.notes          = [];
+        this.groupes        = [];
+        this.currentGroup   = null;
+        this.currentGroupId = null;
 
         this.weights = {
             written:       0.30,
@@ -35,8 +42,8 @@ class GradeManager {
     init() {
         this.cacheElements();
         this.bindEvents();
-        this.loadData();
         this.loadSystemParameters();
+        this.loadGroupes();
     }
 
     cacheElements() {
@@ -113,24 +120,288 @@ class GradeManager {
             catch { return { error: 'PARSE_ERROR', message: 'Réponse invalide.' }; }
 
             if (!res.ok) {
-                // Flatten DRF errors
                 let msg = `Erreur ${res.status}`;
-                if (data?.detail)           msg = data.detail;
-                else if (data?.error)       msg = data.error;
+                if (data?.detail)                msg = data.detail;
+                else if (data?.error)            msg = data.error;
                 else if (data?.non_field_errors) msg = data.non_field_errors.join(', ');
-                else                        msg = JSON.stringify(data);
+                else                             msg = JSON.stringify(data);
                 return { error: 'API_ERROR', message: msg, raw: data };
             }
 
             return data;
         } catch (e) {
-            console.error('[apiRequest]', e);
             return { error: 'NETWORK_ERROR', message: 'Serveur inaccessible : ' + e.message };
         }
     }
 
+    // ── GROUP SELECTION ───────────────────────────────────────────────────────
+
+    async loadGroupes() {
+        this.renderGroupPicker(null, true);
+
+        const result = await this.apiRequest('/groupes/?statut=Actif');
+        if (result?.error) {
+            this.renderGroupPicker(null, false, result.message);
+            return;
+        }
+
+        this.groupes = Array.isArray(result) ? result : (result.results || []);
+
+        // ── FIX: Fetch REAL student counts live from /etudiants/?groupe=X ──
+        const countResults = await Promise.all(
+            this.groupes.map(g => this.apiRequest(`/etudiants/?groupe=${g.id}`))
+        );
+        this.groupes = this.groupes.map((g, i) => ({
+            ...g,
+            nombre_etudiants: countResults[i]?.error
+                ? (g.nombre_etudiants || 0)
+                : (Array.isArray(countResults[i])
+                    ? countResults[i].length
+                    : (countResults[i]?.results?.length ?? g.nombre_etudiants ?? 0)),
+        }));
+
+        // If URL has ?groupe=X, pre-select that group
+        const urlParams = new URLSearchParams(window.location.search);
+        const preselect = urlParams.get('groupe');
+        if (preselect) {
+            const found = this.groupes.find(g => String(g.id) === String(preselect));
+            if (found) {
+                this.selectGroup(found.id);
+                return;
+            }
+        }
+
+        this.renderGroupPicker(this.groupes, false);
+    }
+
+    renderGroupPicker(groupes, loading = false, errorMsg = null) {
+        let container = document.getElementById('group-picker');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'group-picker';
+            const target = this.elements.evaluationsGrid?.closest('section, .main-content, main')
+                        || document.body;
+            target.insertBefore(container, target.firstChild);
+        }
+
+        // Always apply themed container style
+        container.style.cssText = `
+            margin-bottom:24px;
+            background:linear-gradient(135deg,rgba(102,126,234,.08),rgba(118,75,162,.06));
+            border-radius:16px;padding:20px 24px;
+            box-shadow:0 4px 16px rgba(102,126,234,.15);
+            border:2px solid rgba(102,126,234,.2);`;
+
+        if (loading) {
+            container.innerHTML = `
+                <div style="display:flex;align-items:center;gap:12px;color:#667eea;
+                            font-weight:600;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                         stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"
+                         style="animation:spin 1s linear infinite;">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    </svg>
+                    <span>Chargement des groupes...</span>
+                </div>
+                <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+            return;
+        }
+
+        if (errorMsg) {
+            container.innerHTML = `
+                <div style="color:#dc2626;font-weight:600;display:flex;
+                            align-items:center;gap:8px;">
+                    ⚠️ Impossible de charger les groupes : ${errorMsg}
+                </div>`;
+            return;
+        }
+
+        if (!groupes || !groupes.length) {
+            container.innerHTML = `
+                <div style="color:#64748b;text-align:center;padding:8px;">
+                    Aucun groupe actif trouvé.
+                </div>`;
+            return;
+        }
+
+        const flag = l => {
+            if (!l) return '🌐';
+            const ll = l.toLowerCase();
+            if (ll.includes('angl'))  return '🇬🇧';
+            if (ll.includes('franc')) return '🇫🇷';
+            if (ll.includes('allem')) return '🇩🇪';
+            if (ll.includes('espag')) return '🇪🇸';
+            if (ll.includes('ital'))  return '🇮🇹';
+            return '🌐';
+        };
+
+        const levelColors = {
+            A1: '#fee2e2,#991b1b',
+            A2: '#ffedd5,#9a3412',
+            B1: '#fef9c3,#854d0e',
+            B2: '#dcfce7,#166534',
+            C1: '#dbeafe,#1e40af',
+        };
+
+        container.innerHTML = `
+            <style>
+                .g-pick-card:hover {
+                    transform: translateY(-3px) !important;
+                    box-shadow: 0 8px 24px rgba(102,126,234,.3) !important;
+                    border-color: #667eea !important;
+                }
+                @keyframes spin { to { transform: rotate(360deg); } }
+            </style>
+
+            <!-- Header row -->
+            <div style="display:flex;align-items:center;gap:12px;
+                        margin-bottom:18px;flex-wrap:wrap;">
+                <div style="width:38px;height:38px;border-radius:10px;flex-shrink:0;
+                            background:linear-gradient(135deg,#667eea,#764ba2);
+                            display:flex;align-items:center;justify-content:center;
+                            box-shadow:0 4px 12px rgba(102,126,234,.4);">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                         stroke="white" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div style="font-weight:800;color:#1e293b;font-size:1rem;
+                                line-height:1.2;">
+                        Sélectionner un groupe
+                    </div>
+                    <div style="font-size:0.8rem;font-weight:600;
+                                background:linear-gradient(135deg,#667eea,#764ba2);
+                                -webkit-background-clip:text;-webkit-text-fill-color:transparent;">
+                        ${groupes.length} groupe${groupes.length > 1 ? 's' : ''} disponible${groupes.length > 1 ? 's' : ''}
+                    </div>
+                </div>
+
+                <!-- Quick dropdown -->
+                <select id="group-quick-select"
+                        style="margin-left:auto;padding:9px 14px;
+                               border:2px solid rgba(102,126,234,.3);
+                               border-radius:10px;font-size:0.875rem;cursor:pointer;
+                               background:white;color:#374151;outline:none;
+                               font-weight:600;
+                               box-shadow:0 2px 8px rgba(102,126,234,.1);
+                               transition:border-color .2s;"
+                        onchange="window.gradeManager.selectGroup(parseInt(this.value))">
+                    <option value="">-- Choisir rapidement --</option>
+                    ${groupes.map(g => `
+                        <option value="${g.id}"
+                                ${this.currentGroupId === g.id ? 'selected' : ''}>
+                            ${flag(g.langue)} ${g.nom_groupe} — ${g.niveau}
+                            (${g.nombre_etudiants} étudiant${g.nombre_etudiants !== 1 ? 's' : ''})
+                        </option>`
+                    ).join('')}
+                </select>
+            </div>
+
+            <!-- Cards grid -->
+            <div style="display:flex;flex-wrap:wrap;gap:12px;" id="group-cards">
+                ${groupes.map(g => {
+                    const [bgC, txC] = (levelColors[g.niveau] || ',').split(',');
+                    const isActive   = this.currentGroupId === g.id;
+                    return `
+                    <div class="g-pick-card"
+                         data-gid="${g.id}"
+                         onclick="window.gradeManager.selectGroup(${g.id})"
+                         style="cursor:pointer;border-radius:14px;padding:16px 18px;
+                                border:2px solid ${isActive ? '#667eea' : '#e2e8f0'};
+                                background:${isActive
+                                    ? 'linear-gradient(135deg,#667eea,#764ba2)'
+                                    : 'white'};
+                                transition:all .2s ease;
+                                min-width:155px;flex:1;max-width:215px;
+                                box-shadow:${isActive
+                                    ? '0 8px 24px rgba(102,126,234,.45)'
+                                    : '0 2px 8px rgba(0,0,0,.05)'};
+                                transform:${isActive ? 'translateY(-2px)' : 'none'};">
+
+                        <!-- Top row: flag + level badge -->
+                        <div style="display:flex;justify-content:space-between;
+                                    align-items:center;margin-bottom:10px;">
+                            <span style="font-size:1.25rem;">${flag(g.langue)}</span>
+                            <span style="padding:4px 10px;border-radius:20px;
+                                         font-size:0.7rem;font-weight:800;
+                                         letter-spacing:.5px;text-transform:uppercase;
+                                         background:${isActive
+                                            ? 'rgba(255,255,255,.25)'
+                                            : (bgC || '#f1f5f9')};
+                                         color:${isActive ? 'white' : (txC || '#475569')};">
+                                ${g.niveau}
+                            </span>
+                        </div>
+
+                        <!-- Group name -->
+                        <div style="font-weight:700;font-size:0.9rem;margin-bottom:6px;
+                                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                                    color:${isActive ? 'white' : '#1e293b'};"
+                             title="${g.nom_groupe}">
+                            ${g.nom_groupe}
+                        </div>
+
+                        <!-- Student count — shows REAL number -->
+                        <div style="font-size:0.78rem;
+                                    color:${isActive ? 'rgba(255,255,255,.75)' : '#64748b'};
+                                    display:flex;align-items:center;gap:4px;">
+                            👥
+                            <strong style="color:${isActive ? 'white' : '#1e293b'};
+                                           font-size:0.85rem;">
+                                ${g.nombre_etudiants}
+                            </strong>
+                            <span>/ ${g.capacite_max || '?'} places</span>
+                        </div>
+
+                        ${isActive ? `
+                        <div style="margin-top:10px;padding-top:10px;
+                                    border-top:1px solid rgba(255,255,255,.2);
+                                    font-size:0.72rem;font-weight:700;color:white;
+                                    display:flex;align-items:center;gap:4px;">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+                                 stroke="white" stroke-width="3"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            Groupe sélectionné
+                        </div>` : ''}
+                    </div>`;
+                }).join('')}
+            </div>`;
+    }
+
+    async selectGroup(groupeId) {
+        if (!groupeId) return;
+
+        this.currentGroupId = groupeId;
+        this.currentGroup   = this.groupes.find(g => g.id === groupeId) || null;
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('groupe', groupeId);
+        window.history.replaceState({}, '', url);
+
+        this.renderGroupPicker(this.groupes, false);
+
+        if (this.elements.currentGroupName && this.currentGroup) {
+            this.elements.currentGroupName.textContent = this.currentGroup.nom_groupe;
+        }
+
+        await this.loadData();
+    }
+
     // ── DATA LOADING ──────────────────────────────────────────────────────────
     async loadData() {
+        if (!this.currentGroupId) {
+            this.showToast('Veuillez sélectionner un groupe.', 'warning');
+            return;
+        }
+
         this.showLoading();
 
         const [evaluationsResult, studentsResult] = await Promise.all([
@@ -158,12 +429,8 @@ class GradeManager {
     }
 
     async loadEvaluations() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const groupeId  = urlParams.get('groupe') || window.DJANGO_CONTEXT?.groupId;
-        let endpoint = '/evaluations/';
-        if (groupeId) endpoint += `?groupe=${groupeId}`;
-
-        const result = await this.apiRequest(endpoint);
+        if (!this.currentGroupId) return [];
+        const result = await this.apiRequest(`/evaluations/?groupe=${this.currentGroupId}`);
         if (result?.error) return result;
 
         return result.map(ev => ({
@@ -180,12 +447,8 @@ class GradeManager {
     }
 
     async loadStudents() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const groupeId  = urlParams.get('groupe') || window.DJANGO_CONTEXT?.groupId;
-        let endpoint = '/etudiants/';
-        if (groupeId) endpoint += `?groupe=${groupeId}`;
-
-        const result = await this.apiRequest(endpoint);
+        if (!this.currentGroupId) return [];
+        const result = await this.apiRequest(`/etudiants/?groupe=${this.currentGroupId}`);
         if (result?.error) return result;
 
         return result.map(s => ({
@@ -193,7 +456,7 @@ class GradeManager {
             nom:           s.user?.nom_complet ||
                            `${s.user?.first_name || ''} ${s.user?.last_name || ''}`.trim(),
             email:         s.user?.email,
-            userId:        s.user?.id,         // ✅ needed for notifications
+            userId:        s.user?.id,
             niveau:        s.niveau_actuel,
             groupe:        s.groupe_nom || s.groupe,
             groupeId:      s.groupe,
@@ -213,7 +476,7 @@ class GradeManager {
         if (result?.error) return [];
         return result.map(n => ({
             id:              n.id,
-            evaluationId:    n.evaluation,      // ✅ raw FK integer
+            evaluationId:    n.evaluation,
             evaluationTitre: n.evaluation_titre,
             note:            parseFloat(n.note_obtenue),
             max:             parseFloat(n.note_max),
@@ -242,12 +505,14 @@ class GradeManager {
         if (this.elements.evaluationsGrid)
             this.elements.evaluationsGrid.innerHTML = `
                 <div class="eval-card" style="grid-column:1/-1;text-align:center;padding:40px;">
-                    <div style="font-size:2rem;margin-bottom:10px;">⏳</div><p>Chargement...</p>
+                    <div style="font-size:2rem;margin-bottom:10px;">⏳</div>
+                    <p>Chargement des évaluations...</p>
                 </div>`;
         if (this.elements.studentsTableBody)
             this.elements.studentsTableBody.innerHTML = `
                 <tr><td colspan="9" style="text-align:center;padding:40px;">
-                    <div style="font-size:2rem;">⏳</div><p>Chargement des étudiants...</p>
+                    <div style="font-size:2rem;">⏳</div>
+                    <p>Chargement des étudiants du groupe...</p>
                 </td></tr>`;
     }
 
@@ -258,7 +523,7 @@ class GradeManager {
             <div style="text-align:center;padding:40px;color:#dc2626;">
                 <div style="font-size:2.5rem;margin-bottom:12px;">${icon}</div>
                 <p style="font-weight:600;">${message}</p>
-                <button onclick="window.location.reload()"
+                <button onclick="window.gradeManager.loadData()"
                     style="margin-top:16px;padding:10px 20px;background:#667eea;color:white;
                            border:none;border-radius:8px;cursor:pointer;font-weight:600;">
                     Réessayer
@@ -274,13 +539,28 @@ class GradeManager {
 
     renderEvaluations() {
         if (!this.elements.evaluationsGrid) return;
+
+        if (!this.currentGroupId) {
+            this.elements.evaluationsGrid.innerHTML = `
+                <div class="eval-card" style="grid-column:1/-1;text-align:center;
+                                              padding:40px;color:#94a3b8;">
+                    <div style="font-size:2.5rem;margin-bottom:12px;">👆</div>
+                    <p style="font-weight:600;">Sélectionnez un groupe pour voir ses évaluations</p>
+                </div>`;
+            return;
+        }
+
         if (!this.evaluations.length) {
             this.elements.evaluationsGrid.innerHTML = `
                 <div class="eval-card" style="grid-column:1/-1;text-align:center;padding:40px;">
-                    <p>Aucune évaluation trouvée</p>
+                    <div style="font-size:2.5rem;margin-bottom:12px;">📋</div>
+                    <p style="font-weight:600;color:#64748b;">
+                        Aucune évaluation pour ${this.currentGroup?.nom_groupe || 'ce groupe'}
+                    </p>
                     <button onclick="window.gradeManager.openNewEvaluationModal()"
-                            style="margin-top:15px;padding:8px 16px;background:#667eea;
-                                   color:white;border:none;border-radius:6px;cursor:pointer;">
+                            style="margin-top:15px;padding:10px 20px;background:#667eea;
+                                   color:white;border:none;border-radius:8px;cursor:pointer;
+                                   font-weight:600;">
                         + Créer une évaluation
                     </button>
                 </div>`;
@@ -301,37 +581,56 @@ class GradeManager {
                  style="background:white;border-radius:16px;padding:24px;
                         box-shadow:0 2px 4px rgba(0,0,0,.05);border:2px solid transparent;
                         transition:all .3s;display:flex;flex-direction:column;cursor:pointer;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
-                    <span style="padding:6px 12px;border-radius:50px;font-size:.75rem;font-weight:700;
-                                 text-transform:uppercase;background:${c.bg};color:${c.color};">
+                <div style="display:flex;justify-content:space-between;
+                            align-items:flex-start;margin-bottom:12px;">
+                    <span style="padding:6px 12px;border-radius:50px;font-size:.75rem;
+                                 font-weight:700;text-transform:uppercase;
+                                 background:${c.bg};color:${c.color};">
                         ${ev.typeLabel}
                     </span>
-                    <span style="color:#94a3b8;font-size:.875rem;">${this.formatDate(ev.date)}</span>
+                    <span style="color:#94a3b8;font-size:.875rem;">
+                        ${this.formatDate(ev.date)}
+                    </span>
                 </div>
-                <h4 style="font-size:1.1rem;color:#1e293b;font-weight:700;margin-bottom:8px;">${ev.titre}</h4>
+                <h4 style="font-size:1.1rem;color:#1e293b;font-weight:700;margin-bottom:8px;">
+                    ${ev.titre}
+                </h4>
                 <p style="color:#64748b;font-size:.875rem;margin-bottom:16px;">
                     Pondération: ${ev.ponderation}% • ${ev.nombreNotes} participants
                 </p>
                 <div style="display:flex;gap:32px;padding:16px 0;
-                            border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;margin-bottom:16px;">
+                            border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;
+                            margin-bottom:16px;">
                     <div style="text-align:center;">
-                        <div style="font-size:1.5rem;font-weight:800;color:#1e293b;">${ev.noteMax}</div>
-                        <div style="font-size:.75rem;color:#64748b;text-transform:uppercase;">Max</div>
+                        <div style="font-size:1.5rem;font-weight:800;color:#1e293b;">
+                            ${ev.noteMax}
+                        </div>
+                        <div style="font-size:.75rem;color:#64748b;text-transform:uppercase;">
+                            Max
+                        </div>
                     </div>
                     <div style="text-align:center;">
-                        <div style="font-size:1.5rem;font-weight:800;color:#1e293b;">${ev.nombreNotes}</div>
-                        <div style="font-size:.75rem;color:#64748b;text-transform:uppercase;">Notes</div>
+                        <div style="font-size:1.5rem;font-weight:800;color:#1e293b;">
+                            ${ev.nombreNotes}
+                        </div>
+                        <div style="font-size:.75rem;color:#64748b;text-transform:uppercase;">
+                            Notes
+                        </div>
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;">
-                    <button onclick="event.stopPropagation();window.gradeManager.openEvaluationDetail('${ev.id}')"
-                            style="flex:1;padding:9px;border:none;border-radius:8px;background:#f1f5f9;
-                                   color:#475569;cursor:pointer;font-weight:600;font-size:.8rem;">
+                    <button onclick="event.stopPropagation();
+                                     window.gradeManager.openEvaluationDetail('${ev.id}')"
+                            style="flex:1;padding:9px;border:none;border-radius:8px;
+                                   background:#f1f5f9;color:#475569;cursor:pointer;
+                                   font-weight:600;font-size:.8rem;">
                         ✏️ Modifier
                     </button>
-                    <button onclick="event.stopPropagation();window.gradeManager.deleteEvaluation('${ev.id}')"
-                            style="flex:1;padding:9px;border:none;border-radius:8px;background:#fef2f2;
-                                   color:#dc2626;cursor:pointer;font-weight:600;font-size:.8rem;">
+                    <button onclick="event.stopPropagation();
+                                     window.gradeManager.deleteEvaluation('${ev.id}')"
+                            style="flex:1;padding:9px;border:none;border-radius:8px;
+                                   background:#fef2f2;color:#dc2626;cursor:pointer;
+                                   font-weight:600;font-size:.8rem;">
                         🗑️ Supprimer
                     </button>
                 </div>
@@ -348,10 +647,21 @@ class GradeManager {
 
     renderStudents() {
         if (!this.elements.studentsTableBody) return;
+
+        if (!this.currentGroupId) {
+            this.elements.studentsTableBody.innerHTML = `
+                <tr><td colspan="9" style="text-align:center;padding:40px;color:#94a3b8;">
+                    <div style="font-size:2.5rem;margin-bottom:12px;">👆</div>
+                    Sélectionnez un groupe pour voir ses étudiants
+                </td></tr>`;
+            return;
+        }
+
         if (!this.students.length) {
             this.elements.studentsTableBody.innerHTML = `
-                <tr><td colspan="9" style="text-align:center;padding:40px;">
-                    Aucun étudiant trouvé dans ce groupe
+                <tr><td colspan="9" style="text-align:center;padding:40px;color:#64748b;">
+                    <div style="font-size:2.5rem;margin-bottom:12px;">👤</div>
+                    Aucun étudiant dans ${this.currentGroup?.nom_groupe || 'ce groupe'}
                 </td></tr>`;
             return;
         }
@@ -361,18 +671,19 @@ class GradeManager {
             return `
             <tr data-student-id="${s.id}" data-level="${s.niveau}"
                 style="transition:background .2s;"
-                onmouseover="this.style.background='#606b76'"
+                onmouseover="this.style.background='#f8fafc'"
                 onmouseout="this.style.background='transparent'">
                 <td style="padding:20px 16px;border-bottom:1px solid #e2e8f0;">
                     <div style="display:flex;align-items:center;gap:16px;">
                         <div style="width:45px;height:45px;border-radius:50%;
                                     background:linear-gradient(135deg,#667eea,#764ba2);
                                     display:flex;align-items:center;justify-content:center;
-                                    color:white;font-weight:700;font-size:.875rem;">
+                                    color:white;font-weight:700;font-size:.875rem;flex-shrink:0;">
                             ${initials}
                         </div>
                         <div>
-                            <h4 style="font-size:.95rem;font-weight:600;color:#1e293b;margin-bottom:4px;">
+                            <h4 style="font-size:.95rem;font-weight:600;color:#1e293b;
+                                       margin-bottom:4px;">
                                 ${this.escHtml(s.nom)}
                             </h4>
                             <span style="font-size:.8rem;color:#64748b;">
@@ -386,28 +697,32 @@ class GradeManager {
                            data-type="written" data-weight="${this.weights.written}"
                            min="0" max="20" step="0.5"
                            style="width:70px;padding:12px;border:2px solid #e2e8f0;
-                                  border-radius:10px;text-align:center;font-size:1rem;font-weight:700;">
+                                  border-radius:10px;text-align:center;
+                                  font-size:1rem;font-weight:700;">
                 </td>
                 <td style="padding:20px 16px;border-bottom:1px solid #e2e8f0;">
                     <input type="number" class="grade-input" data-student="${s.id}"
                            data-type="oral" data-weight="${this.weights.oral}"
                            min="0" max="20" step="0.5"
                            style="width:70px;padding:12px;border:2px solid #e2e8f0;
-                                  border-radius:10px;text-align:center;font-size:1rem;font-weight:700;">
+                                  border-radius:10px;text-align:center;
+                                  font-size:1rem;font-weight:700;">
                 </td>
                 <td style="padding:20px 16px;border-bottom:1px solid #e2e8f0;">
                     <input type="number" class="grade-input" data-student="${s.id}"
                            data-type="comprehension" data-weight="${this.weights.comprehension}"
                            min="0" max="20" step="0.5"
                            style="width:70px;padding:12px;border:2px solid #e2e8f0;
-                                  border-radius:10px;text-align:center;font-size:1rem;font-weight:700;">
+                                  border-radius:10px;text-align:center;
+                                  font-size:1rem;font-weight:700;">
                 </td>
                 <td style="padding:20px 16px;border-bottom:1px solid #e2e8f0;">
                     <input type="number" class="grade-input" data-student="${s.id}"
                            data-type="participation" data-weight="${this.weights.participation}"
                            min="0" max="20" step="0.5"
                            style="width:70px;padding:12px;border:2px solid #e2e8f0;
-                                  border-radius:10px;text-align:center;font-size:1rem;font-weight:700;">
+                                  border-radius:10px;text-align:center;
+                                  font-size:1rem;font-weight:700;">
                 </td>
                 <td class="average-cell" id="avg-${s.id}"
                     style="padding:20px 16px;border-bottom:1px solid #e2e8f0;
@@ -416,7 +731,8 @@ class GradeManager {
                 </td>
                 <td style="padding:20px 16px;border-bottom:1px solid #e2e8f0;">
                     <span class="level-badge"
-                          style="padding:8px 16px;border-radius:50px;font-size:.875rem;font-weight:700;">
+                          style="padding:8px 16px;border-radius:50px;
+                                 font-size:.875rem;font-weight:700;">
                         ${s.niveau}
                     </span>
                 </td>
@@ -424,15 +740,21 @@ class GradeManager {
                     <div style="display:flex;gap:6px;flex-wrap:wrap;">
                         <button onclick="window.gradeManager.openCommentModal(${s.id})"
                                 style="width:36px;height:36px;border:none;background:#f1f5f9;
-                                       border-radius:8px;cursor:pointer;" title="Commentaire">💬</button>
+                                       border-radius:8px;cursor:pointer;" title="Commentaire">
+                            💬
+                        </button>
                         <button onclick="window.gradeManager.viewStudentDetail(${s.id})"
                                 style="width:36px;height:36px;border:none;background:#f1f5f9;
-                                       border-radius:8px;cursor:pointer;" title="Détails">👁️</button>
+                                       border-radius:8px;cursor:pointer;" title="Détails">
+                            👁️
+                        </button>
                         <button onclick="window.gradeManager.sendSingleResult(${s.id})"
                                 id="send-btn-${s.id}"
                                 title="Envoyer la moyenne à l'étudiant"
                                 style="width:36px;height:36px;border:none;background:#dcfce7;
-                                       border-radius:8px;cursor:pointer;font-size:1rem;">📤</button>
+                                       border-radius:8px;cursor:pointer;font-size:1rem;">
+                            📤
+                        </button>
                     </div>
                 </td>
             </tr>`;
@@ -449,14 +771,12 @@ class GradeManager {
     }
 
     // ── APPLY NOTES TO ROW ────────────────────────────────────────────────────
-    // FIXED: match by evaluationId (FK integer) not by title guessing
     applyNotesToRow(studentId, notes) {
         const row = this.elements.studentsTableBody
             ?.querySelector(`[data-student-id="${studentId}"]`);
         if (!row) return;
 
         notes.forEach(note => {
-            // Match by evaluation ID first (reliable)
             const evaluation = this.evaluations.find(e => e.id === note.evaluationId);
             const type = evaluation
                 ? evaluation.type
@@ -465,7 +785,7 @@ class GradeManager {
             const input = row.querySelector(`[data-type="${type}"]`);
             if (input) {
                 input.value          = note.note;
-                input.dataset.noteId = note.id;  // ✅ cache so PATCH is used on next save
+                input.dataset.noteId = note.id;
             }
         });
 
@@ -509,34 +829,28 @@ class GradeManager {
     // ── CALCULATE & SEND ALL ──────────────────────────────────────────────────
     async calculateAndSendAll() {
         if (!this.students.length) {
-            this.showToast('Aucun étudiant chargé.', 'warning');
-            return;
+            this.showToast('Aucun étudiant chargé.', 'warning'); return;
         }
 
         const confirmOk = confirm(
-            `Calculer et envoyer les moyennes à ${this.students.length} étudiant(s) ?\n\n` +
+            `Calculer et envoyer les moyennes à ${this.students.length} étudiant(s) ` +
+            `du groupe "${this.currentGroup?.nom_groupe || ''}" ?\n\n` +
             `Chaque étudiant recevra une notification avec sa moyenne générale.`
         );
         if (!confirmOk) return;
 
         const { updateRow, setDone } = this.openProgressModal(this.students);
-
-        let successCount = 0;
-        let errorCount   = 0;
+        let successCount = 0, errorCount = 0;
 
         for (const student of this.students) {
             updateRow(student.id, 'loading', '⏳ Calcul...');
-
             const avg = this.getStudentAverage(student.id);
 
             if (avg === null) {
                 updateRow(student.id, 'warning', '⚠️ Aucune note saisie');
-                errorCount++;
-                continue;
+                errorCount++; continue;
             }
 
-            // ── PATCH moyenne_generale ────────────────────────────────────
-            // Uses PATCH so the fixed EtudiantDetailView.put() handles it
             updateRow(student.id, 'loading', '⏳ Sauvegarde moyenne...');
             const patchResult = await this.apiRequest(`/etudiants/${student.id}/`, {
                 method: 'PATCH',
@@ -544,13 +858,10 @@ class GradeManager {
             });
 
             if (patchResult?.error) {
-                updateRow(student.id, 'error',
-                    `❌ Erreur mise à jour: ${patchResult.message}`);
-                errorCount++;
-                continue;
+                updateRow(student.id, 'error', `❌ ${patchResult.message}`);
+                errorCount++; continue;
             }
 
-            // ── POST notification ─────────────────────────────────────────
             updateRow(student.id, 'loading', '📨 Envoi notification...');
 
             const niveau  = this.determineLevel(avg);
@@ -560,12 +871,11 @@ class GradeManager {
                           : avg >= 10 ? 'Passable'
                           : 'Insuffisant';
 
-            const userId = student.userId;
-            if (userId) {
+            if (student.userId) {
                 const notifResult = await this.apiRequest('/notifications/', {
                     method: 'POST',
                     body:   JSON.stringify({
-                        utilisateur:       userId,
+                        utilisateur:       student.userId,
                         type_notification: 'Notes',
                         titre:             '📊 Vos résultats sont disponibles',
                         contenu:
@@ -577,26 +887,19 @@ class GradeManager {
                 });
 
                 if (notifResult?.error) {
-                    // Moyenne saved but notification failed → partial success
                     updateRow(student.id, 'warning',
-                        `✓ Moy. ${avg.toFixed(2)} — notif. échouée (${notifResult.message})`);
-                    errorCount++;
-                    continue;
+                        `✓ Moy. ${avg.toFixed(2)} — notif. échouée`);
+                    errorCount++; continue;
                 }
-            } else {
-                console.warn('[GradeManager] userId manquant pour étudiant', student.id);
             }
 
-            updateRow(student.id, 'success',
-                `✅ Moy. ${avg.toFixed(2)}/20 — ${mention}`);
+            updateRow(student.id, 'success', `✅ Moy. ${avg.toFixed(2)}/20 — ${mention}`);
             successCount++;
         }
 
         setDone(successCount, errorCount);
-
-        if (successCount > 0) {
+        if (successCount > 0)
             this.showToast(`✅ ${successCount} étudiant(s) notifié(s)`, 'success', 5000);
-        }
     }
 
     // ── SEND SINGLE STUDENT ───────────────────────────────────────────────────
@@ -606,14 +909,12 @@ class GradeManager {
 
         const avg = this.getStudentAverage(studentId);
         if (avg === null) {
-            this.showToast('Aucune note saisie pour cet étudiant.', 'warning');
-            return;
+            this.showToast('Aucune note saisie pour cet étudiant.', 'warning'); return;
         }
 
         const btn = document.getElementById(`send-btn-${studentId}`);
         if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
 
-        // 1. PATCH moyenne_generale
         const patchResult = await this.apiRequest(`/etudiants/${studentId}/`, {
             method: 'PATCH',
             body:   JSON.stringify({ moyenne_generale: parseFloat(avg.toFixed(2)) }),
@@ -625,7 +926,6 @@ class GradeManager {
             return;
         }
 
-        // 2. POST notification
         const niveau  = this.determineLevel(avg);
         const mention = avg >= 16 ? 'Excellent'
                       : avg >= 14 ? 'Très bien'
@@ -649,23 +949,15 @@ class GradeManager {
             });
 
             if (notifResult?.error) {
-                this.showToast(
-                    `⚠️ Moyenne sauvegardée mais notification échouée: ${notifResult.message}`,
-                    'warning'
-                );
+                this.showToast(`⚠️ Moyenne sauvegardée mais notification échouée`, 'warning');
                 if (btn) { btn.textContent = '⚠️'; btn.disabled = false; }
                 return;
             }
-        } else {
-            console.warn('[GradeManager] userId manquant pour étudiant', studentId);
         }
 
         if (btn) { btn.textContent = '✅'; btn.disabled = false; }
         setTimeout(() => { if (btn) btn.textContent = '📤'; }, 2000);
-        this.showToast(
-            `📨 Résultat envoyé à ${student.nom} (${avg.toFixed(2)}/20)`,
-            'success'
-        );
+        this.showToast(`📨 Résultat envoyé à ${student.nom} (${avg.toFixed(2)}/20)`, 'success');
     }
 
     // ── GET AVERAGE FROM DOM ──────────────────────────────────────────────────
@@ -727,8 +1019,7 @@ class GradeManager {
                         </thead>
                         <tbody id="prog-tbody">
                             ${students.map(s => `
-                                <tr id="prog-row-${s.id}"
-                                    style="border-top:1px solid #f1f5f9;">
+                                <tr id="prog-row-${s.id}" style="border-top:1px solid #f1f5f9;">
                                     <td style="padding:10px 14px;color:#1e293b;font-weight:500;">
                                         ${this.escHtml(s.nom)}
                                     </td>
@@ -740,8 +1031,7 @@ class GradeManager {
                         </tbody>
                     </table>
                 </div>
-                <div id="prog-footer"
-                     style="margin-top:1rem;display:none;justify-content:flex-end;">
+                <div id="prog-footer" style="margin-top:1rem;display:none;justify-content:flex-end;">
                     <button onclick="document.getElementById('modal-progress').remove()"
                         style="padding:.75rem 1.5rem;border:none;border-radius:10px;
                                cursor:pointer;font-weight:600;color:white;
@@ -757,15 +1047,13 @@ class GradeManager {
             const td = document.getElementById(`prog-status-${studentId}`);
             if (!td) return;
             const colors = {
-                loading: '#0284c7',
-                success: '#059669',
-                error:   '#dc2626',
-                warning: '#d97706',
+                loading:'#0284c7', success:'#059669',
+                error:'#dc2626',   warning:'#d97706',
             };
             td.textContent = text;
             td.style.color = colors[state] || '#64748b';
             document.getElementById(`prog-row-${studentId}`)
-                ?.scrollIntoView({ block: 'nearest' });
+                ?.scrollIntoView({ block:'nearest' });
         }
 
         function setDone(successCount, errorCount) {
@@ -795,7 +1083,7 @@ class GradeManager {
         const input = e.target;
         const row   = input.closest('tr');
         input.style.borderColor = '#f59e0b';
-        input.style.background  = '#c4ae55';
+        input.style.background  = '#fffbeb';
         this.calculateRowAverage(row);
         clearTimeout(input.saveTimeout);
         input.saveTimeout = setTimeout(() => this.saveGrade(input, row), 1000);
@@ -829,32 +1117,32 @@ class GradeManager {
         if (badge) {
             badge.textContent = newLevel;
             const levelColors = {
-                A1: { bg:'#141010', color:'#991b1b' },
-                A2: { bg:'rgb(8, 7, 7)', color:'#9a3412' },
-                B1: { bg:'#000000', color:'#92400e' },
-                B2: { bg:'#010101', color:'#166534' },
-                C1: { bg:'#030404', color:'#1e40af' },
+                A1: { bg:'#fee2e2', color:'#991b1b' },
+                A2: { bg:'#ffedd5', color:'#9a3412' },
+                B1: { bg:'#fef9c3', color:'#854d0e' },
+                B2: { bg:'#dcfce7', color:'#166534' },
+                C1: { bg:'#dbeafe', color:'#1e40af' },
             };
             const lc = levelColors[newLevel] || levelColors.A1;
             badge.style.background = lc.bg;
             badge.style.color      = lc.color;
         }
         row.dataset.level = newLevel;
-
         return rounded;
     }
 
-    // ── SAVE GRADE — FIXED: POST vs PATCH with DB lookup fallback ─────────────
+    // ── SAVE GRADE ────────────────────────────────────────────────────────────
     async saveGrade(input, row) {
         const studentId  = parseInt(input.dataset.student);
         const type       = input.dataset.type;
         const value      = parseFloat(input.value);
-        const noteId     = input.dataset.noteId;   // set by applyNotesToRow
+        const noteId     = input.dataset.noteId;
         const evaluation = this.evaluations.find(e => e.type === type);
 
         if (!evaluation) {
             this.showToast(
-                `Aucune évaluation de type "${type}" configurée pour ce groupe.`,
+                `Aucune évaluation de type "${type}" pour ce groupe. ` +
+                `Créez-en une d'abord.`,
                 'error'
             );
             input.style.borderColor = '#e2e8f0';
@@ -865,30 +1153,22 @@ class GradeManager {
         let result;
 
         if (noteId) {
-            // ✅ Note already exists → PATCH only the changed fields
             result = await this.apiRequest(`/notes/${noteId}/`, {
                 method: 'PATCH',
                 body:   JSON.stringify({ note_obtenue: value, note_max: 20 }),
             });
-
         } else {
-            // Safety check: look up in DB before POSTing to avoid unique_together error
             const existing = await this.apiRequest(
                 `/notes/?etudiant=${studentId}&evaluation=${evaluation.id}`
             );
 
             if (!existing?.error && Array.isArray(existing) && existing.length > 0) {
-                // Found in DB → PATCH it and cache the ID
-                const existingNote      = existing[0];
-                input.dataset.noteId    = existingNote.id;
-
-                result = await this.apiRequest(`/notes/${existingNote.id}/`, {
+                input.dataset.noteId = existing[0].id;
+                result = await this.apiRequest(`/notes/${existing[0].id}/`, {
                     method: 'PATCH',
                     body:   JSON.stringify({ note_obtenue: value, note_max: 20 }),
                 });
-
             } else {
-                // Truly new note → POST
                 result = await this.apiRequest('/notes/', {
                     method: 'POST',
                     body:   JSON.stringify({
@@ -898,10 +1178,7 @@ class GradeManager {
                         note_max:     evaluation.noteMax || 20,
                     }),
                 });
-
-                if (!result?.error) {
-                    input.dataset.noteId = result.id;  // cache for next save
-                }
+                if (!result?.error) input.dataset.noteId = result.id;
             }
         }
 
@@ -912,9 +1189,8 @@ class GradeManager {
             return;
         }
 
-        // Visual feedback — green flash
         input.style.borderColor = '#22c55e';
-        input.style.background  = '#63b17b';
+        input.style.background  = '#f0fdf4';
         setTimeout(() => {
             input.style.borderColor = '#e2e8f0';
             input.style.background  = 'transparent';
@@ -951,82 +1227,148 @@ class GradeManager {
 
     // ── NEW EVALUATION MODAL ──────────────────────────────────────────────────
     openNewEvaluationModal() {
-        const modal = document.createElement('div');
-        modal.innerHTML = `
-            <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);
-                        display:flex;align-items:center;justify-content:center;z-index:1000;"
-                 onclick="if(event.target===this)this.remove()">
-                <div style="background:white;border-radius:20px;padding:32px;
-                            width:90%;max-width:500px;
-                            box-shadow:0 25px 50px -12px rgba(0,0,0,.25);"
-                     onclick="event.stopPropagation()">
-                    <h3 style="font-size:1.5rem;font-weight:700;margin-bottom:24px;color:#1e293b;">
+        if (!this.currentGroupId) {
+            this.showToast('Sélectionnez un groupe avant de créer une évaluation.', 'warning');
+            return;
+        }
+
+        document.getElementById('modal-new-eval')?.remove();
+        const overlay = document.createElement('div');
+        overlay.id = 'modal-new-eval';
+        overlay.style.cssText = `
+            position:fixed;inset:0;background:rgba(0,0,0,.5);
+            display:flex;align-items:center;justify-content:center;z-index:1000;`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+        overlay.innerHTML = `
+            <div style="background:white;border-radius:20px;padding:32px;
+                        width:90%;max-width:500px;
+                        box-shadow:0 25px 50px -12px rgba(0,0,0,.25);"
+                 onclick="event.stopPropagation()">
+                <div style="display:flex;justify-content:space-between;
+                            align-items:center;margin-bottom:20px;">
+                    <h3 style="font-size:1.3rem;font-weight:700;margin:0;color:#1e293b;">
                         Nouvelle Évaluation
                     </h3>
-                    <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px;">
-                        <input type="text" id="newEvalTitle" placeholder="Titre de l'évaluation"
-                               style="padding:12px 16px;border:2px solid #e2e8f0;
-                                      border-radius:12px;font-size:1rem;outline:none;">
-                        <select id="newEvalType"
-                                style="padding:12px 16px;border:2px solid #e2e8f0;
-                                       border-radius:12px;font-size:1rem;outline:none;">
-                            <option value="">Type d'évaluation</option>
-                            <option value="Ecrit">Devoir Écrit</option>
-                            <option value="Oral">Expression Orale</option>
-                            <option value="Comprehension">Compréhension</option>
-                            <option value="Participation">Participation</option>
-                        </select>
-                        <input type="number" id="newEvalWeight" placeholder="Pondération (%)"
-                               min="0" max="100"
-                               style="padding:12px 16px;border:2px solid #e2e8f0;
-                                      border-radius:12px;font-size:1rem;outline:none;">
-                        <input type="date" id="newEvalDate"
-                               style="padding:12px 16px;border:2px solid #e2e8f0;
-                                      border-radius:12px;font-size:1rem;outline:none;">
-                    </div>
-                    <div id="newEvalError"
-                         style="display:none;padding:.75rem;background:#fef2f2;
-                                border:1px solid #fecaca;border-radius:8px;
-                                color:#dc2626;font-size:.875rem;margin-bottom:16px;"></div>
-                    <div style="display:flex;gap:12px;justify-content:flex-end;">
-                        <button onclick="this.closest('[style*=fixed]').remove()"
-                                style="padding:12px 24px;border-radius:10px;border:none;
-                                       background:#f1f5f9;color:#64748b;
-                                       font-weight:600;cursor:pointer;">
-                            Annuler
-                        </button>
-                        <button id="btnCreateEval"
-                                style="padding:12px 24px;border-radius:10px;border:none;
-                                       background:linear-gradient(135deg,#667eea,#764ba2);
-                                       color:white;font-weight:600;cursor:pointer;">
-                            Créer
-                        </button>
+                    <button onclick="document.getElementById('modal-new-eval').remove()"
+                            style="background:none;border:none;font-size:1.5rem;
+                                   cursor:pointer;color:#94a3b8;">×</button>
+                </div>
+
+                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;
+                            padding:10px 14px;margin-bottom:20px;display:flex;
+                            align-items:center;gap:8px;">
+                    <span style="font-size:1.1rem;">👥</span>
+                    <div>
+                        <div style="font-size:0.78rem;color:#64748b;">Groupe cible</div>
+                        <div style="font-weight:700;color:#1e40af;">
+                            ${this.currentGroup?.nom_groupe || `Groupe #${this.currentGroupId}`}
+                            — ${this.currentGroup?.niveau || ''}
+                        </div>
                     </div>
                 </div>
-            </div>`;
-        document.body.appendChild(modal);
 
-        modal.querySelector('#btnCreateEval').addEventListener('click', async () => {
-            const errEl = modal.querySelector('#newEvalError');
-            const titre = modal.querySelector('#newEvalTitle').value.trim();
-            const type  = modal.querySelector('#newEvalType').value;
-            const pond  = parseFloat(modal.querySelector('#newEvalWeight').value);
-            const date  = modal.querySelector('#newEvalDate').value;
+                <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px;">
+                    <div>
+                        <label style="display:block;font-size:.875rem;font-weight:600;
+                                      color:#374151;margin-bottom:6px;">Titre *</label>
+                        <input type="text" id="newEvalTitle"
+                               placeholder="ex: Contrôle Écrit Semaine 3"
+                               style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;
+                                      border-radius:12px;font-size:1rem;outline:none;
+                                      box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:.875rem;font-weight:600;
+                                      color:#374151;margin-bottom:6px;">
+                            Type d'évaluation *
+                        </label>
+                        <select id="newEvalType"
+                                style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;
+                                       border-radius:12px;font-size:1rem;outline:none;
+                                       box-sizing:border-box;">
+                            <option value="">-- Choisir un type --</option>
+                            <option value="Ecrit">✍️ Devoir Écrit</option>
+                            <option value="Oral">🗣️ Expression Orale</option>
+                            <option value="Comprehension">👂 Compréhension</option>
+                            <option value="Participation">🙋 Participation</option>
+                        </select>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div>
+                            <label style="display:block;font-size:.875rem;font-weight:600;
+                                          color:#374151;margin-bottom:6px;">
+                                Pondération (%) *
+                            </label>
+                            <input type="number" id="newEvalWeight"
+                                   placeholder="ex: 30" min="0" max="100"
+                                   style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;
+                                          border-radius:12px;font-size:1rem;outline:none;
+                                          box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label style="display:block;font-size:.875rem;font-weight:600;
+                                          color:#374151;margin-bottom:6px;">
+                                Note max *
+                            </label>
+                            <input type="number" id="newEvalNoteMax"
+                                   placeholder="20" value="20" min="1" max="100"
+                                   style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;
+                                          border-radius:12px;font-size:1rem;outline:none;
+                                          box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:.875rem;font-weight:600;
+                                      color:#374151;margin-bottom:6px;">
+                            Date de l'évaluation *
+                        </label>
+                        <input type="date" id="newEvalDate"
+                               value="${new Date().toISOString().split('T')[0]}"
+                               style="width:100%;padding:12px 16px;border:2px solid #e2e8f0;
+                                      border-radius:12px;font-size:1rem;outline:none;
+                                      box-sizing:border-box;">
+                    </div>
+                </div>
+
+                <div id="newEvalError"
+                     style="display:none;padding:.75rem;background:#fef2f2;
+                            border:1px solid #fecaca;border-radius:8px;
+                            color:#dc2626;font-size:.875rem;margin-bottom:16px;"></div>
+
+                <div style="display:flex;gap:12px;justify-content:flex-end;">
+                    <button onclick="document.getElementById('modal-new-eval').remove()"
+                            style="padding:12px 24px;border-radius:10px;border:none;
+                                   background:#f1f5f9;color:#64748b;
+                                   font-weight:600;cursor:pointer;">
+                        Annuler
+                    </button>
+                    <button id="btnCreateEval"
+                            style="padding:12px 24px;border-radius:10px;border:none;
+                                   background:linear-gradient(135deg,#667eea,#764ba2);
+                                   color:white;font-weight:600;cursor:pointer;">
+                        ✅ Créer pour ce groupe
+                    </button>
+                </div>
+            </div>`;
+
+        document.body.appendChild(overlay);
+
+        document.getElementById('btnCreateEval').addEventListener('click', async () => {
+            const errEl = document.getElementById('newEvalError');
+            const btn   = document.getElementById('btnCreateEval');
+            const titre = document.getElementById('newEvalTitle').value.trim();
+            const type  = document.getElementById('newEvalType').value;
+            const pond  = parseFloat(document.getElementById('newEvalWeight').value);
+            const nmax  = parseFloat(document.getElementById('newEvalNoteMax').value) || 20;
+            const date  = document.getElementById('newEvalDate').value;
 
             if (!titre || !type || isNaN(pond) || !date) {
-                errEl.textContent = '⚠️ Veuillez remplir tous les champs.';
+                errEl.textContent   = '⚠️ Veuillez remplir tous les champs obligatoires.';
                 errEl.style.display = 'block'; return;
             }
 
-            const urlParams = new URLSearchParams(window.location.search);
-            const groupeId  = urlParams.get('groupe') ||
-                              window.DJANGO_CONTEXT?.groupId ||
-                              this.students[0]?.groupeId;
-
-            if (!groupeId) {
-                errEl.textContent = '⚠️ Groupe introuvable. Ajoutez ?groupe=ID à l\'URL.';
-                errEl.style.display = 'block'; return;
-            }
+            btn.innerHTML = '⏳ Création...'; btn.disabled = true;
 
             const result = await this.apiRequest('/evaluations/', {
                 method: 'POST',
@@ -1035,19 +1377,28 @@ class GradeManager {
                     type,
                     ponderation:     pond,
                     date_evaluation: date,
-                    groupe:          parseInt(groupeId),
-                    note_max:        20,
+                    note_max:        nmax,
+                    groupe:          this.currentGroupId,
                 }),
             });
 
             if (result?.error) {
-                errEl.textContent = '❌ ' + result.message;
-                errEl.style.display = 'block'; return;
+                errEl.textContent   = '❌ ' + result.message;
+                errEl.style.display = 'block';
+                btn.innerHTML = '✅ Créer pour ce groupe'; btn.disabled = false;
+                return;
             }
 
-            modal.remove();
-            this.showToast('Évaluation créée ✓', 'success');
-            await this.loadData();
+            overlay.remove();
+            this.showToast(
+                `✅ Évaluation "${titre}" créée pour ${this.currentGroup?.nom_groupe}`,
+                'success'
+            );
+            const evResult = await this.loadEvaluations();
+            if (!evResult?.error) {
+                this.evaluations = evResult;
+                this.renderEvaluations();
+            }
         });
     }
 
@@ -1068,9 +1419,8 @@ class GradeManager {
             display:flex;align-items:center;justify-content:center;z-index:2000;`;
         overlay.innerHTML = `
             <div style="background:white;border-radius:20px;padding:2rem;
-                        width:90%;max-width:480px;
-                        box-shadow:0 25px 50px rgba(0,0,0,.25);
-                        max-height:90vh;overflow-y:auto;"
+                        width:90%;max-width:480px;max-height:90vh;overflow-y:auto;
+                        box-shadow:0 25px 50px rgba(0,0,0,.25);"
                  onclick="event.stopPropagation()">
                 <div style="display:flex;justify-content:space-between;
                             align-items:center;margin-bottom:1.5rem;">
@@ -1114,7 +1464,9 @@ class GradeManager {
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
                         <div>
                             <label style="display:block;font-size:.875rem;font-weight:600;
-                                          color:#374151;margin-bottom:6px;">Pondération (%) *</label>
+                                          color:#374151;margin-bottom:6px;">
+                                Pondération (%) *
+                            </label>
                             <input id="ed-pond" type="number"
                                    value="${ev.ponderation}" min="0" max="100"
                                    style="width:100%;padding:.75rem;border:2px solid #e2e8f0;
@@ -1153,9 +1505,7 @@ class GradeManager {
             </div>`;
 
         document.body.appendChild(overlay);
-        overlay.addEventListener('click', e => {
-            if (e.target === overlay) overlay.remove();
-        });
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
         document.getElementById('ed-save').addEventListener('click',
             () => this.editEvaluation(evalId)
         );
@@ -1174,7 +1524,7 @@ class GradeManager {
         const nmax  = parseFloat(document.getElementById('ed-notemax').value);
 
         if (!titre || !type || isNaN(pond) || !date || isNaN(nmax)) {
-            errEl.textContent   = '⚠️ Veuillez remplir tous les champs obligatoires.';
+            errEl.textContent   = '⚠️ Veuillez remplir tous les champs.';
             errEl.style.display = 'block'; return;
         }
 
@@ -1184,7 +1534,7 @@ class GradeManager {
             method: 'PATCH',
             body:   JSON.stringify({
                 titre, type, ponderation: pond,
-                date_evaluation: date, note_max: nmax
+                date_evaluation: date, note_max: nmax,
             }),
         });
 
@@ -1214,8 +1564,7 @@ class GradeManager {
         const ev = this.evaluations.find(e => String(e.id) === String(evalId));
         if (!ev) return;
         if (!confirm(
-            `Supprimer "${ev.titre}" ?\n\n` +
-            `⚠️ Toutes les notes (${ev.nombreNotes}) seront supprimées.`
+            `Supprimer "${ev.titre}" ?\n\n⚠️ Toutes les notes (${ev.nombreNotes}) seront supprimées.`
         )) return;
 
         const result = await this.apiRequest(`/evaluations/${evalId}/`, { method:'DELETE' });
@@ -1236,8 +1585,8 @@ class GradeManager {
                  onclick="if(event.target===this)this.remove()">
                 <div style="background:white;border-radius:20px;padding:32px;
                             width:90%;max-width:500px;" onclick="event.stopPropagation()">
-                    <h3 style="font-size:1.5rem;font-weight:700;margin-bottom:16px;color:#1e293b;">
-                        Commentaire pour ${this.escHtml(student?.nom || '')}
+                    <h3 style="font-size:1.3rem;font-weight:700;margin-bottom:16px;color:#1e293b;">
+                        💬 Commentaire — ${this.escHtml(student?.nom || '')}
                     </h3>
                     <textarea id="commentText" rows="4"
                               placeholder="Votre commentaire..."
@@ -1277,7 +1626,8 @@ class GradeManager {
     handleExport() {
         const data = {
             date_export: new Date().toISOString(),
-            etudiants: this.students.map(s => {
+            groupe:      this.currentGroup?.nom_groupe || 'Inconnu',
+            etudiants:   this.students.map(s => {
                 const row    = this.elements.studentsTableBody
                     ?.querySelector(`[data-student-id="${s.id}"]`);
                 const inputs = row?.querySelectorAll('.grade-input') || [];
@@ -1296,7 +1646,8 @@ class GradeManager {
         const url  = URL.createObjectURL(blob);
         const a    = Object.assign(document.createElement('a'), {
             href: url,
-            download: `notes_export_${new Date().toISOString().split('T')[0]}.json`,
+            download: `notes_${this.currentGroup?.nom_groupe || 'export'}_${
+                new Date().toISOString().split('T')[0]}.json`,
         });
         a.click();
         URL.revokeObjectURL(url);
@@ -1327,10 +1678,10 @@ class GradeManager {
     // ── UTILITIES ─────────────────────────────────────────────────────────────
     mapApiTypeToFrontend(apiType) {
         return {
-            Ecrit:          'written',
-            Oral:           'oral',
-            Comprehension:  'comprehension',
-            Participation:  'participation',
+            Ecrit:         'written',
+            Oral:          'oral',
+            Comprehension: 'comprehension',
+            Participation: 'participation',
         }[apiType] || apiType.toLowerCase();
     }
 
@@ -1367,8 +1718,10 @@ class GradeManager {
     updateHeaderInfo() {
         if (this.elements.studentCount)
             this.elements.studentCount.textContent = this.students.length;
-        if (this.students[0] && this.elements.currentLevel)
-            this.elements.currentLevel.textContent = `Niveau ${this.students[0].niveau}`;
+        if (this.currentGroup && this.elements.currentLevel)
+            this.elements.currentLevel.textContent = `Niveau ${this.currentGroup.niveau}`;
+        if (this.currentGroup && this.elements.currentGroupName)
+            this.elements.currentGroupName.textContent = this.currentGroup.nom_groupe;
     }
 
     updateFormulaDisplay() {
@@ -1394,7 +1747,7 @@ class GradeManager {
         document.querySelector('.toast-notification')?.remove();
         const colors = {
             success:'#059669', error:'#dc2626',
-            warning:'#d97706', info:'#0284c7'
+            warning:'#d97706', info:'#0284c7',
         };
         const icons = { success:'✓', error:'✕', warning:'⚠', info:'ℹ' };
         const toast = document.createElement('div');
