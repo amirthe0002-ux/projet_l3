@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planning - Secrétaire</title>
+     <link rel="stylesheet" href="{% static 'css/Gestion_planing.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-calendar-alt"></i> Planning des Cours</h1>
+            <div class="header-actions">
+                <button class="btn-secondary">
+                    <i class="fas fa-filter"></i> Filtrer
+                </button>
+                <button class="btn-primary">
+                    <i class="fas fa-plus"></i> Nouvelle Séance
+                </button>
+            </div>
+        </div>
+
+        <div class="calendar-container">
+            <div class="calendar-header">
+                <div class="calendar-nav">
+                    <button class="nav-btn"><i class="fas fa-chevron-left"></i></button>
+                    <h2>Semaine du 24 - 28 Mars 2026</h2>
+                    <button class="nav-btn"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <div class="view-toggle">
+                    <button class="view-btn">Jour</button>
+                    <button class="view-btn active">Semaine</button>
+                    <button class="view-btn">Mois</button>
+                </div>
+            </div>
+
+            <div class="week-view">
+                <!-- Time Column -->
+                <div class="time-column">
+                    <div class="time-slot-header">Heure</div>
+                    <div class="time-slot-header">09:00</div>
+                    <div class="time-slot-header">11:00</div>
+                    <div class="time-slot-header">14:00</div>
+                    <div class="time-slot-header">16:00</div>
+                    <div class="time-slot-header">18:00</div>
+                </div>
+
+                <!-- Monday -->
+                <div class="day-column">
+                    <div class="day-header today">
+                        Lun
+                        <span>24 Mars</span>
+                    </div>
+                    <div class="schedule-slot">
+                        <div class="session anglais" style="top: 0; height: 76px;">
+                            <div class="session-time">09:00 - 11:00</div>
+                            <div class="session-group">Anglais A1</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 101</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot">
+                        <div class="session francais" style="top: 0; height: 76px;">
+                            <div class="session-time">14:00 - 16:00</div>
+                            <div class="session-group">Français B1</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 203</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot">
+                        <div class="session anglais" style="top: 0; height: 76px;">
+                            <div class="conflict-indicator"><i class="fas fa-exclamation"></i></div>
+                            <div class="session-time">18:00 - 20:00</div>
+                            <div class="session-group">Anglais A2</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 101</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tuesday -->
+                <div class="day-column">
+                    <div class="day-header">
+                        Mar
+                        <span>25 Mars</span>
+                    </div>
+                    <div class="schedule-slot">
+                        <div class="session allemand" style="top: 0; height: 76px;">
+                            <div class="session-time">09:00 - 11:00</div>
+                            <div class="session-group">Allemand B2</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 305</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot">
+                        <div class="session anglais" style="top: 0; height: 76px;">
+                            <div class="session-time">16:00 - 18:00</div>
+                            <div class="session-group">Anglais B1</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 102</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                </div>
+
+                <!-- Wednesday -->
+                <div class="day-column">
+                    <div class="day-header">
+                        Mer
+                        <span>26 Mars</span>
+                    </div>
+                    <div class="schedule-slot">
+                        <div class="session anglais" style="top: 0; height: 76px;">
+                            <div class="session-time">09:00 - 11:00</div>
+                            <div class="session-group">Anglais A1</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 101</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot">
+                        <div class="session francais" style="top: 0; height: 76px;">
+                            <div class="session-time">14:00 - 16:00</div>
+                            <div class="session-group">Français B2</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 204</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot"></div>
+                </div>
+
+                <!-- Thursday -->
+                <div class="day-column">
+                    <div class="day-header">
+                        Jeu
+                        <span>27 Mars</span>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot">
+                        <div class="session anglais" style="top: 0; height: 76px;">
+                            <div class="session-time">11:00 - 13:00</div>
+                            <div class="session-group">Anglais C1</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 201</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot">
+                        <div class="session allemand" style="top: 0; height: 76px;">
+                            <div class="session-time">16:00 - 18:00</div>
+                            <div class="session-group">Allemand A2</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 305</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                </div>
+
+                <!-- Friday -->
+                <div class="day-column">
+                    <div class="day-header">
+                        Ven
+                        <span>28 Mars</span>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot">
+                        <div class="session francais" style="top: 0; height: 76px;">
+                            <div class="session-time">11:00 - 13:00</div>
+                            <div class="session-group">Français A2</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 202</div>
+                        </div>
+                    </div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot"></div>
+                    <div class="schedule-slot">
+                        <div class="session anglais" style="top: 0; height: 76px;">
+                            <div class="session-time">18:00 - 20:00</div>
+                            <div class="session-group">Anglais B2</div>
+                            <div class="session-room"><i class="fas fa-door-open"></i> Salle 103</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="calendar-legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #dbeafe; border-left: 4px solid #3b82f6;"></div>
+                    <span>Anglais</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fce7f3; border-left: 4px solid #ec4899;"></div>
+                    <span>Français</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f3e8ff; border-left: 4px solid #a855f7;"></div>
+                    <span>Allemand</span>
+                </div>
+                <div class="legend-item">
+                    <i class="fas fa-exclamation-circle" style="color: var(--danger);"></i>
+                    <span>Conflit détecté</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+<script src="{% static 'js/Gestion_planning.js' %}"></script>
+</html>

@@ -21,7 +21,7 @@ class IsComptable(BasePermission):
         return bool(
             request.user and
             request.user.is_authenticated and
-            request.user.role in ['Comptable', 'Secretariat']
+            request.user.role in ['Comptable', 'Secretariat','Dirigeant']
         )
 
 

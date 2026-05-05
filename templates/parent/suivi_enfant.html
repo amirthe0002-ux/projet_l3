@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suivi de l'Enfant - Espace Parent</title>
+
+    <link rel="stylesheet" href="{% static 'css/suivi_enfant.css' %}">
+<script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=b1RU8uKotj3BWZKyip8fbGNZXGpcCXL7kKSXn90q9KaVMfEVCDZQwr4u7Q9OuGinIKSuZKr0_92i1MvGk5t8GA_G7tQgAPyym6wRclhHxKeYLXI038s0HOVkkMydRUY96hd05WUpH2Ejo9USu85WySOzl3c0DxYRj9iypeUvq0g8eHMWCSA2-lgo58tEik2obC7Qz8xsAMzsWgWfujvuNjbw3_FL6J9i--h68AjhF_YXDmOSjh2S7KLraTEcTkTRfUoS0HvFdv38KXpdoczjBw" charset="UTF-8"></script><link rel="stylesheet" crossorigin="anonymous" href="https://gc.kis.v2.scr.kaspersky-labs.com/E3E8934C-235A-4B0E-825A-35A08381A191/abn/main.css?attr=aHR0cHM6Ly9jZG4uZGlzY29yZGFwcC5jb20vYXR0YWNobWVudHMvMTQ3NzA3OTY0ODU0MTA4NTcwMS8xNDk2MjA2NzI4MjQ3Nzc1MjgzL3N1aXZpX2VuZmFudC5odG1sP2V4PTY5ZTkwYTlhJmlzPTY5ZTdiOTFhJmhtPWI0OTM1MDg1YmVjMDY2NDZkMzRkY2E2YWVmZjY0ZWY4NjU3ZDQ2ODAwNGU4MTQ5MDcwOWNlODUyOTU4ZTZmZjQm"/></head>
+<body>
+<div class="layout">
+
+    <!-- ====== SIDEBAR ====== -->
+    <aside class="sidebar">
+        <div class="logo">
+            <div class="logo-icon"><i class="fas fa-graduation-cap"></i></div>
+            <div>
+                <div class="logo-title">LanguePro</div>
+                <div class="logo-subtitle">Espace Parent</div>
+            </div>
+        </div>
+
+        <div class="parent-profile">
+            <div class="parent-avatar" id="parentAvatar">MP</div>
+            <div>
+                <div class="parent-name" id="parentName">Chargement...</div>
+                <div class="parent-email" id="parentEmail">—</div>
+            </div>
+        </div>
+
+        <nav class="nav">
+            <a href="{% url 'dashboard_parent' %}" class="nav-item">
+                <i class="fas fa-chart-line"></i><span>Tableau de Bord</span>
+            </a>
+            <a href="{% url 'suivi_enfant' %}" class="nav-item active">
+                <i class="fas fa-child"></i><span>Suivi Enfant</span>
+            </a>
+            <a href="{% url 'messagerie_parent' %}" class="nav-item">
+                <i class="fas fa-comments"></i><span>Messagerie</span>
+                <span class="badge" id="msgBadge" style="display:none;">0</span>
+            </a>
+            <a href="{% url 'mes_ressourcess' %}" class="nav-item">
+                <i class="fas fa-bell"></i><span>Ressources</span>
+                <span class="badge" id="notifBadge" style="display:none;">0</span>
+            </a>
+            <a href="#" class="nav-item" id="logoutLink">
+                <i class="fas fa-sign-out-alt"></i><span>Déconnexion</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!-- ====== MAIN ====== -->
+    <main class="main">
+
+        <!-- Header -->
+        <header class="header">
+            <div>
+                <h1>Suivi de l'Enfant</h1>
+                <p class="header-sub">Vue complète — notes, absences, planning, ressources</p>
+            </div>
+            <select class="select-filter" id="enfantSelect">
+                <option value="">Chargement...</option>
+            </select>
+        </header>
+
+        <!-- ── PROFIL ENFANT ── -->
+        <div class="enfant-banner" id="enfantBanner">
+            <div class="enfant-avatar" id="enfantAvatar">—</div>
+            <div class="enfant-details">
+                <h2 id="enfantNom">—</h2>
+                <div class="enfant-tags">
+                    <span class="tag blue" id="enfantNiveau">—</span>
+                    <span class="tag purple" id="enfantGroupe">—</span>
+                    <span class="tag green" id="enfantStatut">—</span>
+                </div>
+            </div>
+            <div class="kpi-row">
+                <div class="kpi">
+                    <div class="kpi-val" id="kpiMoyenne">—</div>
+                    <div class="kpi-lbl">Moyenne</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-val" id="kpiAssiduite">—</div>
+                    <div class="kpi-lbl">Assiduité</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-val" id="kpiAbsences">—</div>
+                    <div class="kpi-lbl">Absences</div>
+                </div>
+                <div class="kpi">
+                    <div class="kpi-val" id="kpiNotes">—</div>
+                    <div class="kpi-lbl">Évaluations</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── TABS ── -->
+        <div class="tabs">
+            <button class="tab active" data-tab="notes">
+                <i class="fas fa-star"></i> Notes
+            </button>
+            <button class="tab" data-tab="absences">
+                <i class="fas fa-user-clock"></i> Absences
+                <span class="tab-badge" id="tabAbsBadge" style="display:none;">0</span>
+            </button>
+            <button class="tab" data-tab="planning">
+                <i class="fas fa-calendar-alt"></i> Planning
+            </button>
+
+        </div>
+
+        <!-- ══════════════════════════════════
+             TAB : NOTES
+        ══════════════════════════════════ -->
+        <div class="tab-content active" id="tab-notes">
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-star"></i> Dernières Évaluations</h2>
+                    <span class="card-count" id="notesCount">0 évaluation(s)</span>
+                </div>
+                <div id="notesList">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Graphique progression -->
+            <div class="card" style="margin-top:1.5rem;">
+                <div class="card-header">
+                    <h2><i class="fas fa-chart-bar"></i> Progression par Compétence</h2>
+                </div>
+                <div class="competences-grid" id="competencesGrid">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════
+             TAB : ABSENCES
+        ══════════════════════════════════ -->
+        <div class="tab-content" id="tab-absences">
+
+            <!-- Stats absences -->
+            <div class="stats-row" id="statsAbsences">
+                <div class="stat-box good">
+                    <h3>Taux d'assiduité</h3>
+                    <div class="value" id="statTaux">—</div>
+                </div>
+                <div class="stat-box good">
+                    <h3>Présences</h3>
+                    <div class="value" id="statPresences">—</div>
+                </div>
+                <div class="stat-box warning">
+                    <h3>Absences justifiées</h3>
+                    <div class="value" id="statJustifiees">—</div>
+                </div>
+                <div class="stat-box danger">
+                    <h3>Non justifiées</h3>
+                    <div class="value" id="statNonJust">—</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-list"></i> Historique des absences</h2>
+                </div>
+                <div class="absence-list" id="absenceList">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════
+             TAB : PLANNING
+        ══════════════════════════════════ -->
+        <div class="tab-content" id="tab-planning">
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-calendar-alt"></i> Planning des Cours</h2>
+                    <span class="card-count" id="planningCount">0 séance(s)</span>
+                </div>
+                <div class="planning-grid" id="planningGrid">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════
+             TAB : RESSOURCES
+        ══════════════════════════════════ -->
+        <div class="tab-content" id="tab-ressources">
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-book-open"></i> Ressources Pédagogiques</h2>
+                    <span class="card-count" id="ressourcesCount">0 ressource(s)</span>
+                </div>
+                <div class="resources-grid" id="resourcesGrid">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script src="{% static 'js/suivi_enfant.js' %}"></script>
+</body>
+</html>

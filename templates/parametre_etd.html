@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paramètres - Étudiant</title>
+    <link rel="stylesheet" href="{% static 'css/parametres_etd.css' %}">
+    
+</head>
+<body>
+    <div class="settings-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-graduation-cap"></i>
+                <span>EduLang</span>
+            </div>
+            <nav class="nav-menu">
+                <a href="{% url 'dashboard_etudiant' %}" class="nav-item"><i class="fas fa-home"></i><span>Tableau de Bord</span></a>
+                <a href="{% url 'mes_notes' %}" class="nav-item"><i class="fas fa-star"></i><span>Mes Notes</span></a>
+                <a href="{% url 'mon_planning' %}" class="nav-item"><i class="fas fa-calendar"></i><span>Mon Planning</span></a>
+                <a href="{% url 'mon_niveau' %}" class="nav-item"><i class="fas fa-layer-group"></i><span>Mon Niveau</span></a>
+                <a href="{% url 'mes_ressources' %}" class="nav-item"><i class="fas fa-folder"></i><span>Ressources</span></a>
+                <a href="{% url 'profil_etudiant' %}" class="nav-item"><i class="fas fa-user"></i><span>Mon Profil</span></a>
+                <a href="{% url 'parametres_etudiant' %}" class="nav-item active"><i class="fas fa-cog"></i><span>Paramètres</span></a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="settings-header">
+                <h1><i class="fas fa-cog"></i> Paramètres</h1>
+                <p>Gérez vos préférences et configurations personnelles</p>
+            </div>
+
+            <div class="settings-grid">
+                <!-- Left Column -->
+                <div class="left-column">
+                    <!-- Profile Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-user-circle"></i> Informations Personnelles</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="profileForm">
+                                <div class="form-group">
+                                    <label>Prénom</label>
+                                    <input type="text" id="firstName" name="first_name" class="form-control" placeholder="Votre prénom">
+                                </div>
+                                <div class="form-group">
+                                    <label>Nom</label>
+                                    <input type="text" id="lastName" name="last_name" class="form-control" placeholder="Votre nom">
+                                </div>
+                                <div class="form-group">
+                                    <label>Email</label>
+                                    <input type="email" id="email" name="email" class="form-control" placeholder="votre@email.com" readonly>
+                                    <small class="form-text">L'email ne peut pas être modifié</small>
+                                </div>
+                                <div class="form-group">
+                                    <label>Téléphone</label>
+                                    <input type="tel" id="phone" name="telephone" class="form-control" placeholder="05XX XX XX XX">
+                                </div>
+                                <div class="form-group">
+                                    <label>Adresse</label>
+                                    <textarea id="address" name="adresse" class="form-control" rows="2" placeholder="Votre adresse complète"></textarea>
+                                </div>
+                                <button type="submit" class="btn-save">
+                                    <i class="fas fa-save"></i> Enregistrer les modifications
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Password Change -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-lock"></i> Sécurité</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="passwordForm">
+                                <div class="form-group">
+                                    <label>Mot de passe actuel</label>
+                                    <div class="password-input">
+                                        <input type="password" id="currentPassword" name="ancien_password" class="form-control" placeholder="••••••••">
+                                        <button type="button" class="toggle-password" onclick="togglePassword('currentPassword')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Nouveau mot de passe</label>
+                                    <div class="password-input">
+                                        <input type="password" id="newPassword" name="nouveau_password" class="form-control" placeholder="••••••••">
+                                        <button type="button" class="toggle-password" onclick="togglePassword('newPassword')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                    <div class="password-strength" id="passwordStrength"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Confirmer le mot de passe</label>
+                                    <div class="password-input">
+                                        <input type="password" id="confirmPassword" name="nouveau_password2" class="form-control" placeholder="••••••••">
+                                        <button type="button" class="toggle-password" onclick="togglePassword('confirmPassword')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn-save btn-secondary">
+                                    <i class="fas fa-key"></i> Changer le mot de passe
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="right-column">
+                    <!-- Notification Preferences -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-bell"></i> Notifications</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="notification-settings">
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <h4>Notifications par email</h4>
+                                        <p>Recevoir les alertes sur votre email</p>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" id="emailNotif" checked>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <h4>Notifications SMS</h4>
+                                        <p>Recevoir les alertes importantes par SMS</p>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" id="smsNotif">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <h4>Notifications dans l'app</h4>
+                                        <p>Activer les notifications push</p>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" id="appNotif" checked>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <h4>Rappels de cours</h4>
+                                        <p>Recevoir un rappel 30 min avant le cours</p>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" id="reminderNotif" checked>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <h4>Alertes de notes</h4>
+                                        <p>Être notifié quand une nouvelle note est ajoutée</p>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" id="gradeNotif" checked>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <button class="btn-save" onclick="saveNotificationSettings()">
+                                <i class="fas fa-save"></i> Enregistrer les préférences
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Privacy Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-shield-alt"></i> Confidentialité</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="privacy-settings">
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <h4>Profil visible</h4>
+                                        <p>Permettre aux autres étudiants de voir votre profil</p>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" id="profileVisible">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="setting-info">
+                                        <h4>Partager ma progression</h4>
+                                        <p>Afficher mon niveau et progression publiquement</p>
+                                    </div>
+                                    <label class="switch">
+                                        <input type="checkbox" id="shareProgress">
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Language & Region -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-globe"></i> Langue et Région</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label>Langue de l'interface</label>
+                                <select id="language" class="form-control">
+                                    <option value="fr">Français</option>
+                                    <option value="ar">العربية</option>
+                                    <option value="en">English</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Fuseau horaire</label>
+                                <select id="timezone" class="form-control">
+                                    <option value="Africa/Algiers">Alger (GMT+1)</option>
+                                    <option value="Europe/Paris">Paris (GMT+1/+2)</option>
+                                    <option value="UTC">UTC</option>
+                                </select>
+                            </div>
+                            <button class="btn-save" onclick="saveLanguageSettings()">
+                                <i class="fas fa-save"></i> Enregistrer
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Account Actions -->
+                    <div class="card card-danger">
+                        <div class="card-header">
+                            <h3><i class="fas fa-exclamation-triangle"></i> Zone de danger</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="danger-actions">
+                                <div class="danger-item">
+                                    <div class="danger-info">
+                                        <h4>Télécharger mes données</h4>
+                                        <p>Exporter toutes vos données personnelles</p>
+                                    </div>
+                                    <button class="btn-danger-outline" onclick="exportData()">
+                                        <i class="fas fa-download"></i> Exporter
+                                    </button>
+                                </div>
+                                <div class="danger-item">
+                                    <div class="danger-info">
+                                        <h4>Désactiver mon compte</h4>
+                                        <p>Temporairement désactiver votre compte</p>
+                                    </div>
+                                    <button class="btn-danger-outline" onclick="deactivateAccount()">
+                                        <i class="fas fa-pause-circle"></i> Désactiver
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{% static 'js/parametres_etd.js' %}"></script>
+</body>
+</html>

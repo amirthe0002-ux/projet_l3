@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion Utilisateurs - Dashboard Dirigeant</title>
+
+
+
+    <!-- Your existing CSS file -->
+    <link rel="stylesheet" href="{% static 'css/utilisateur.css' %}">
+
+    <!-- Additional styles required by JS -->
+   
+
+<body>
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-72 glass-panel flex flex-col border-r border-slate-700">
+            <!-- Logo -->
+            <div class="p-6 border-b border-slate-700">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center"
+                         style="background: linear-gradient(135deg, #6366f1, #9333ea);">
+                        <i class="fas fa-graduation-cap text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-white">LanguePro</h1>
+                        <p class="text-xs text-slate-400">Espace Dirigeant</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="flex-1 py-6 px-3 space-y-4">
+                <a href="{% url 'dashboard_dirigeant' %}" class="sidebar-link">
+                    <i class="fas fa-chart-line w-5"></i>
+                Tableau de Bord
+                </a>
+                <a href="{% url 'audit' %}" class="sidebar-link">
+                    <i class="fas fa-chalkboard-teacher w-5"></i>
+                Audit & Logs
+                </a>
+                <a href="{% url 'utilisateurs' %}" class="sidebar-link active">
+                    <i class="fas fa-users-cog w-5 text-indigo-400"></i>
+                Utilisateurs
+                </a>
+                <a href="{% url 'rapports' %}" class="sidebar-link">
+                    <i class="fas fa-users w-5"></i>
+                Rapport
+                </a>
+            
+                <a href="{% url 'finance' %}" class="sidebar-link">
+                    <i class="fas fa-wallet w-5"></i>
+                    Finances
+                </a>
+                <a href="{% url 'parametres' %}" class="sidebar-link">
+                    <i class="fas fa-cog w-5"></i>
+                    Paramètres
+                </a>
+                <a href="#" class="sidebar-link logout-link">
+                    <i class="fas fa-sign-out-alt w-5"></i>
+                    Déconnexion
+                </a>
+            </nav>
+
+            <!-- User profile -->
+            <div class="p-4 border-t border-slate-700">
+                <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50">
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff"
+                         class="w-10 h-10 rounded-full">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-white truncate">Directeur</p>
+                        <p class="text-xs text-slate-400 truncate">dirigeant@languepro.com</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto bg-slate-900">
+            <!-- Header -->
+            <header class="sticky top-0 z-20 glass-panel border-b border-slate-700 px-8 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Gestion des Utilisateurs</h2>
+                        <p class="text-sm text-slate-400">Administrateurs, Comptables et Secrétariat</p>
+                    </div>
+                    <button class="btn-primary">
+                        <i class="fas fa-plus mr-2"></i>
+                        Nouvel Utilisateur
+                    </button>
+                </div>
+            </header>
+
+            <div class="p-8 space-y-6">
+                <!-- Statistics Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="glass-panel p-4 text-center rounded-xl">
+                        <p class="text-3xl font-bold text-white stat-value">{{ total_utilisateurs|default:0 }}</p>
+                        <p class="text-sm text-slate-400">Total Utilisateurs</p>
+                    </div>
+                    <div class="glass-panel p-4 text-center rounded-xl">
+                        <p class="text-3xl font-bold text-emerald-400 stat-value">{{ utilisateurs_actifs|default:0 }}</p>
+                        <p class="text-sm text-slate-400">Actifs</p>
+                    </div>
+                    <div class="glass-panel p-4 text-center rounded-xl">
+                        <p class="text-3xl font-bold text-amber-400 stat-value">{{ utilisateurs_en_attente|default:0 }}</p>
+                        <p class="text-sm text-slate-400">En attente</p>
+                    </div>
+                    <div class="glass-panel p-4 text-center rounded-xl">
+                        <p class="text-3xl font-bold text-red-400 stat-value">{{ utilisateurs_bloques|default:0 }}</p>
+                        <p class="text-sm text-slate-400">Bloqués</p>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="glass-panel p-4 rounded-xl">
+                    <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+                        <!-- Filter Tabs -->
+                        <div class="flex gap-2 flex-wrap">
+                            <button class="tab-btn active">Tous</button>
+                            <button class="tab-btn">Dirigeants</button>
+                            <button class="tab-btn">Enseignants</button>
+                            <button class="tab-btn">Étudiants</button>
+                            <button class="tab-btn">Secrétariat</button>
+                            <button class="tab-btn">Parents</button>
+                        </div>
+
+                        <!-- Search -->
+                        <div class="relative">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500"></i>
+                            <input type="text" class="search-input" placeholder="Rechercher un utilisateur...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Users Grid - CRITICAL: Must have 'users-grid' class -->
+                <div class="users-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                    <!-- Example User Card 1 - Admin -->
+                    <div class="user-card" data-user-id="1" data-role="Dirigeant" data-profile-id="">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <img src="https://ui-avatars.com/api/?name=Admin&background=ef4444&color=fff"
+                                     class="w-12 h-12 rounded-full">
+                                <div>
+                                    <h3 class="font-semibold text-white">Vous (Admin)</h3>
+                                    <p class="text-sm text-slate-400">dirigeant@languepro.com</p>
+                                </div>
+                            </div>
+                            <span class="status-dot status-active" title="Actif"></span>
+                        </div>
+                        <div class="mb-4">
+                            <span class="role-badge role-dirigeant">Dirigeant</span>
+                        </div>
+                        <div class="space-y-2 text-sm text-slate-400 mb-4">
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-phone text-xs w-4"></i>
+                                <span>+33 6 12 34 56 78</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-clock text-xs w-4"></i>
+                                <span>Dernière connexion: Maintenant</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-shield-alt text-xs w-4"></i>
+                                <span>2FA Activé</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="btn-edit flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-white">
+                                <i class="fas fa-edit mr-1"></i> Modifier
+                            </button>
+                            <button class="btn-menu px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Example User Card 2 - Comptable -->
+                    <div class="user-card" data-user-id="2" data-role="Comptable" data-profile-id="">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <img src="https://ui-avatars.com/api/?name=Karim+Alaoui&background=10b981&color=fff"
+                                     class="w-12 h-12 rounded-full">
+                                <div>
+                                    <h3 class="font-semibold text-white">Karim Alaoui</h3>
+                                    <p class="text-sm text-slate-400">comptable@languepro.com</p>
+                                </div>
+                            </div>
+                            <span class="status-dot status-active" title="Actif"></span>
+                        </div>
+                        <div class="mb-4">
+                            <span class="role-badge role-comptable">Comptable</span>
+                        </div>
+                        <div class="space-y-2 text-sm text-slate-400 mb-4">
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-phone text-xs w-4"></i>
+                                <span>+33 6 23 45 67 89</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-clock text-xs w-4"></i>
+                                <span>Dernière connexion: Il y a 2h</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-shield-alt text-xs w-4"></i>
+                                <span>2FA Activé</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="btn-edit flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-white">
+                                <i class="fas fa-edit mr-1"></i> Modifier
+                            </button>
+                            <button class="btn-menu px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Example User Card 3 - Secrétariat -->
+                    <div class="user-card" data-user-id="3" data-role="Secretariat" data-profile-id="">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <img src="https://ui-avatars.com/api/?name=Sarah+Lefevre&background=3b82f6&color=fff"
+                                     class="w-12 h-12 rounded-full">
+                                <div>
+                                    <h3 class="font-semibold text-white">Sarah Lefevre</h3>
+                                    <p class="text-sm text-slate-400">s.lefevre@languepro.com</p>
+                                </div>
+                            </div>
+                            <span class="status-dot status-active" title="Actif"></span>
+                        </div>
+                        <div class="mb-4">
+                            <span class="role-badge role-secretaire">Secrétariat</span>
+                        </div>
+                        <div class="space-y-2 text-sm text-slate-400 mb-4">
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-phone text-xs w-4"></i>
+                                <span>+33 6 34 56 78 90</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-clock text-xs w-4"></i>
+                                <span>Dernière connexion: Il y a 5h</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-shield-alt text-xs w-4"></i>
+                                <span>2FA Désactivé</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="btn-edit flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm text-white">
+                                <i class="fas fa-edit mr-1"></i> Modifier
+                            </button>
+                            <button class="btn-menu px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Example User Card 4 - Locked -->
+                    <div class="user-card" data-user-id="4" data-role="Secretariat" data-profile-id="" style="opacity: 0.7;">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex items-center gap-3">
+                                <img src="https://ui-avatars.com/api/?name=Thomas+Martin&background=64748b&color=fff"
+                                     class="w-12 h-12 rounded-full">
+                                <div>
+                                    <h3 class="font-semibold text-white">Thomas Martin</h3>
+                                    <p class="text-sm text-slate-400">t.martin@languepro.com</p>
+                                </div>
+                            </div>
+                            <span class="status-dot status-locked" title="Bloqué"></span>
+                        </div>
+                        <div class="mb-4">
+                            <span class="role-badge role-secretaire">Secrétariat</span>
+                            <span class="ml-2 px-2 py-1 rounded text-xs bg-red-500/20 text-red-400">Bloqué</span>
+                        </div>
+                        <div class="space-y-2 text-sm text-slate-400 mb-4">
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-phone text-xs w-4"></i>
+                                <span>+33 6 67 89 01 23</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-clock text-xs w-4"></i>
+                                <span>Dernière connexion: Il y a 15j</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-red-400">
+                                <i class="fas fa-ban text-xs w-4"></i>
+                                <span>5 tentatives échouées</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="btn-unlock flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm text-white">
+                                <i class="fas fa-unlock mr-1"></i> Débloquer
+                            </button>
+                            <button class="btn-menu px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Permissions Matrix -->
+                <div class="glass-panel p-6 rounded-xl">
+                    <h3 class="text-lg font-semibold text-white mb-6">Matrice des Permissions</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-slate-700">
+                                    <th class="text-left py-3 px-4 text-slate-400 font-medium">Permission</th>
+                                    <th class="text-center py-3 px-4 text-slate-400 font-medium">Dirigeant</th>
+                                    <th class="text-center py-3 px-4 text-slate-400 font-medium">Comptable</th>
+                                    <th class="text-center py-3 px-4 text-slate-400 font-medium">Secrétariat</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800">
+                                <tr>
+                                    <td class="py-3 px-4 text-white">Tableau de bord complet</td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 text-white">Gestion utilisateurs</td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 text-white">Gestion finances & paiements</td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 text-white">Gestion étudiants & groupes</td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 text-white">Gestion enseignants</td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 text-white">Paramètres système</td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 px-4 text-white">Audit & logs</td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-check text-emerald-400"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                    <td class="text-center py-3 px-4"><i class="fas fa-minus text-slate-600"></i></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{% static 'js/utilisateurs.js' %}"></script>
+</body>
+</html>

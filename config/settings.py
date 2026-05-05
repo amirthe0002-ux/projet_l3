@@ -14,12 +14,13 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-your-secret-key')
 DEBUG = os.getenv('DEBUG', True) == 'True'
 
 # Allowed hosts
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = ['*']
+#ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # ============================================
 # INSTALLED APPS
 # ============================================
-ASGI_APPLICATION = 'config.asgi.application'
+ASGI_APPLICATION = 'config.asgi.application' 
 INSTALLED_APPS = [
     'daphne',  # WebSocket support
     'django.contrib.admin',
@@ -28,6 +29,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
+    
 
     # Third-party
     'rest_framework',
@@ -50,8 +53,11 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+      'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
 ]
-
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 # ============================================
 # ROOT URLCONF
 # ============================================
@@ -77,6 +83,17 @@ TEMPLATES = [
         },
     },
 ]
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [
+    'authorization',
+    'content-type',
+    'x-requested-with',
+    'accept',
+    'origin',
+    'x-csrftoken',
+]
+CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 
 # ============================================
 # DATABASE
@@ -172,7 +189,14 @@ REST_FRAMEWORK = {
         'rest_framework.filters.OrderingFilter',
     ],
 }
-
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('127.0.0.1', 6379)],
+        },
+    },
+}
 # ============================================
 # JWT CONFIGURATION
 # ============================================

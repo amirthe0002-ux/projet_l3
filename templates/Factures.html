@@ -1,0 +1,216 @@
+
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur de Factures - Centre de Langues</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/factures.css' %}">
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="bg-animation">
+        <div class="bg-gradient"></div>
+        <div class="floating-shapes">
+            <div class="shape shape-1"></div>
+            <div class="shape shape-2"></div>
+            <div class="shape shape-3"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header animate-in">
+            <div class="header-title">
+                <div class="header-icon">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                </div>
+                <div class="header-text">
+                    <h1>Générateur de Factures</h1>
+                    <p>Centre de Langues - Secrétariat</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="resetForm()">
+                    <i class="fas fa-redo"></i> Nouveau
+                </button>
+                <button class="btn btn-success" onclick="saveInvoice()">
+                    <i class="fas fa-save"></i> Sauvegarder
+                </button>
+                <button class="btn btn-primary" onclick="generatePDF()">
+                    <i class="fas fa-download"></i> PDF
+                </button>
+                <button class="btn btn-primary" onclick="printInvoice()">
+                    <i class="fas fa-print"></i> Imprimer
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Left Panel: Form -->
+            <div class="panel animate-in" style="animation-delay: 0.1s;">
+                <div class="panel-header">
+                    <i class="fas fa-pen-fancy"></i>
+                    <h2>Créer une Facture</h2>
+                </div>
+
+                <!-- Template Selector -->
+                <div class="form-group">
+                    <label class="form-label">Style de Facture</label>
+                    <div class="template-selector">
+                        <div class="template-option template-1 active" onclick="changeTemplate(1)">
+                            <div class="template-preview">
+                                <div class="template-header"></div>
+                                <div class="template-body"></div>
+                            </div>
+                        </div>
+                        <div class="template-option template-2" onclick="changeTemplate(2)">
+                            <div class="template-preview">
+                                <div class="template-header"></div>
+                                <div class="template-body"></div>
+                            </div>
+                        </div>
+                        <div class="template-option template-3" onclick="changeTemplate(3)">
+                            <div class="template-preview">
+                                <div class="template-header"></div>
+                                <div class="template-body"></div>
+                            </div>
+                        </div>
+                        <div class="template-option template-4" onclick="changeTemplate(4)">
+                            <div class="template-preview">
+                                <div class="template-header"></div>
+                                <div class="template-body"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">N° Facture</label>
+                        <div class="input-group">
+                            <i class="fas fa-hashtag input-icon"></i>
+                            <input type="text" class="form-input input-with-icon" id="invoiceNum" value="FAC-2026-001" onchange="updatePreview()">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Date</label>
+                        <div class="input-group">
+                            <i class="fas fa-calendar input-icon"></i>
+                            <input type="date" class="form-input input-with-icon" id="invoiceDate" onchange="updatePreview()">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Échéance</label>
+                        <div class="input-group">
+                            <i class="fas fa-clock input-icon"></i>
+                            <input type="date" class="form-input input-with-icon" id="dueDate" onchange="updatePreview()">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Statut</label>
+                        <select class="form-select" id="invoiceStatus" onchange="updatePreview()">
+                            <option value="payée">Payée</option>
+                            <option value="en attente" selected>En attente</option>
+                            <option value="en retard">En retard</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="panel-header" style="margin-top: 1.5rem;">
+                    <i class="fas fa-user"></i>
+                    <h2>Client</h2>
+                    <button class="btn btn-small btn-secondary" onclick="openStudentSelector()" style="margin-left: auto; font-size: 0.8rem; padding: 0.5rem 1rem;">
+                        <i class="fas fa-search"></i> Chercher
+                    </button>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nom complet</label>
+                    <input type="text" class="form-input" id="clientName" placeholder="Ali Benali" oninput="updatePreview()">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" id="clientEmail" placeholder="ali@email.com" oninput="updatePreview()">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Téléphone</label>
+                    <input type="tel" class="form-input" id="clientPhone" placeholder="0555 123 456" oninput="updatePreview()">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Adresse</label>
+                    <textarea class="form-textarea" id="clientAddress" rows="2" placeholder="123 Rue des Langues, Alger" oninput="updatePreview()"></textarea>
+                </div>
+
+                <div class="panel-header" style="margin-top: 1.5rem;">
+                    <i class="fas fa-list"></i>
+                    <h2>Services</h2>
+                </div>
+
+                <div class="services-container" id="servicesList">
+                    <!-- Services will be added here dynamically -->
+                </div>
+
+                <button class="btn-add-service" onclick="addService()">
+                    <i class="fas fa-plus"></i> Ajouter un service
+                </button>
+
+                <div class="form-row" style="margin-top: 1.5rem;">
+                    <div class="form-group">
+                        <label class="form-label">Remise (%)</label>
+                        <input type="number" class="form-input" id="discount" value="0" min="0" max="100" onchange="updatePreview()">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">TVA (%)</label>
+                        <input type="number" class="form-input" id="tva" value="19" min="0" onchange="updatePreview()">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Notes / Conditions</label>
+                    <textarea class="form-textarea" id="notes" rows="3" placeholder="Conditions de paiement..." oninput="updatePreview()"></textarea>
+                </div>
+
+                <!-- Mobile Save Button (visible only on small screens) -->
+                <button class="btn btn-success btn-full" onclick="saveInvoice()" style="margin-top: 1.5rem; display: none;">
+                    <i class="fas fa-save"></i> Sauvegarder la Facture
+                </button>
+            </div>
+
+            <!-- Right Panel: Preview -->
+            <div class="preview-container animate-in" style="animation-delay: 0.2s;">
+                <div class="panel-header" style="margin-bottom: 1rem;">
+                    <i class="fas fa-eye"></i>
+                    <h2>Aperçu en Direct</h2>
+                </div>
+                
+                <div class="invoice-preview" id="invoicePreview">
+                    <!-- Invoice content generated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- History Section -->
+        <div class="history-section animate-in" style="animation-delay: 0.3s;">
+            <div class="panel-header" style="margin-bottom: 1rem;">
+                <i class="fas fa-history"></i>
+                <h2>Factures Récentes</h2>
+            </div>
+            <div class="history-grid" id="historyGrid">
+                <!-- History cards generated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/factures.js' %}"></script>
+</body>
+</html>

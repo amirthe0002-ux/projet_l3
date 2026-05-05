@@ -3,8 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from api.views import login_page
-from api.views import login_page,  dashboard_scr, dashboard_ens, groupes
-from django.conf import settings
+from api.views import login_page,  dashboard_ens, groupes 
 from django.conf.urls.static import static
 
 
@@ -16,7 +15,8 @@ from api.views import (
     acces_refuse_view,
 
     # Secrétariat
-    dashboard_secretariat,
+    dashboard_scr,
+    
     etudiants_view,
     etudiant_detail_view,
     enseignants_view,
@@ -26,6 +26,8 @@ from api.views import (
     planning_view,
     parents_view,
     inscriptions_view,
+    salaires_view,
+    finance_view,
 
     # Comptable (+ Secrétariat hérite)
     dashboard_comptable,
@@ -34,7 +36,7 @@ from api.views import (
     bulletins_view,
     bulletin_detail_view,
     situation_financiere_view,
-
+    parametres_view,
     # Dirigeant
     dashboard_dirigeant,
     parametres_view,
@@ -64,29 +66,30 @@ from api.views import (
     suivi_enfant_view,
     messagerie_parent_view,
     notifications_parent_view,
+    mes_ressources_vieww,
 
     # Commun
     profil_view,
     notifications_view,
     messagerie_view,
 )
-
+#S
 
 admin.site.site_header = 'admin panel'
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
     path('login/', login_page, name='login_page'),
-    path('dashboard_scr/', dashboard_scr, name='dashboard_scr'),
-    path('dashboard/enseignant/', dashboard_ens, name='dashboard_ens'),
-    path('dashboard/enseignant/groupe', groupes, name='groupes'),
+  
+   
+    
 
 
 
     # ============================================================
     # SECRÉTARIAT
-    # ============================================================
-    path('dashboard/secretariat/',                     dashboard_secretariat,   name='dashboard_secretariat'),
+    # ============================================================0
+    path('dashboard/secretariat/',                     dashboard_scr,   name='dashboard_secretariat'),
     path('secretariat/etudiants/',           etudiants_view,          name='etudiants'),
     path('secretariat/etudiants/<int:pk>/',  etudiant_detail_view,    name='etudiant_detail'),
     path('secretariat/enseignants/',         enseignants_view,        name='enseignants'),
@@ -96,6 +99,7 @@ urlpatterns = [
     path('secretariat/planning/',            planning_view,           name='planning'),
     path('secretariat/parents/',             parents_view,            name='parents'),
     path('secretariat/inscriptions/',        inscriptions_view,       name='inscriptions'),
+     path('secretariat/salaires/',                salaires_view,            name='salaires'),
 
 
     path('comptable/',                          dashboard_comptable,       name='dashboard_comptable'),
@@ -106,18 +110,19 @@ urlpatterns = [
     path('comptable/situation-financiere/',     situation_financiere_view, name='situation_financiere'),
 
 
-    path('dirigeant/',                   dashboard_dirigeant, name='dashboard_dirigeant'),
+    path('dashboard/dirigeant/',                   dashboard_dirigeant, name='dashboard_dirigeant'),
     path('dirigeant/parametres/',        parametres_view,     name='parametres'),
     path('dirigeant/audit/',             audit_view,          name='audit'),
     path('dirigeant/utilisateurs/',      utilisateurs_view,   name='utilisateurs'),
     path('dirigeant/rapports/',          rapports_view,       name='rapports'),
+     path('dirigeant/fiannce/',          finance_view,       name='finance'),
 
 
-    path('enseignant/',                  dashboard_enseignant,       name='dashboard_enseignant'),
-    path('dashboard/enseignant/groupes/',mes_groupes_view,           name='mes_groupes'),
+    path('dashboard/enseignant/',                  dashboard_ens,       name='dashboard_enseignant'),
+    path('enseignant/groupes/',mes_groupes_view,           name='mes_groupes'),
     path('enseignant/notes/',            notes_view,                 name='notes'),
-    path('dashboard/enseignant/absences/',         absences_view,              name='absences'),
-    path('dashboard/enseignant/ressources/',       ressources_view,            name='ressources'),
+    path('enseignant/absences/',         absences_view,              name='absences'),
+    path('enseignant/ressources/',       ressources_view,            name='ressources'),
     path('enseignant/messagerie/',       messagerie_enseignant_view, name='messagerie_enseignant'),
     path('enseignant/evaluations/',      evaluations_view,           name='evaluations'),
 
@@ -127,14 +132,15 @@ urlpatterns = [
     path('etudiant/planning/',           mon_planning_view,   name='mon_planning'),
     path('etudiant/niveau/',             mon_niveau_view,     name='mon_niveau'),
     path('etudiant/ressources/',         mes_ressources_view, name='mes_ressources'),
-    path('etudiant/messagerie/',     messagerie_etudiant_view, name='messagerie_etudiant'),
+    path('messagerie/',     messagerie_etudiant_view, name='messagerie_etudiant'),
+    
 
 
-    path('parent/',                      dashboard_parent,         name='dashboard_parent'),
+    path('dashboard/parent/',                      dashboard_parent,         name='dashboard_parent'),
     path('parent/suivi/',                suivi_enfant_view,        name='suivi_enfant'),
     path('parent/messagerie/',           messagerie_parent_view,   name='messagerie_parent'),
     path('parent/notifications/',        notifications_parent_view, name='notifications_parent'),
-
+    path('parent/ressources/',         mes_ressources_vieww, name='mes_ressourcess'),
 
     path('profil/',        profil_view,       name='profil'),
     path('notifications/', notifications_view, name='notifications'),

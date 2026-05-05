@@ -1035,16 +1035,19 @@ class BulletinSalaire(models.Model):
         ]
 
     def save(self, *args, **kwargs):
-        """Calculer les montants"""
-        self.salaire_brut = self.heures_travaillees * self.tarif_horaire
+        """Calculer les montants — fixed: float * Decimal TypeError"""
+        from decimal import Decimal
+        heures = Decimal(str(self.heures_travaillees or 0))
+        tarif  = Decimal(str(self.tarif_horaire or 0))
+        self.salaire_brut = heures * tarif
 
-        total_retenues = 0
+        total_retenues = Decimal('0')
         if self.assurance:
-            total_retenues += self.assurance
+            total_retenues += Decimal(str(self.assurance))
         if self.cotisations:
-            total_retenues += self.cotisations
+            total_retenues += Decimal(str(self.cotisations))
         if self.autres_retenues:
-            total_retenues += self.autres_retenues
+            total_retenues += Decimal(str(self.autres_retenues))
 
         self.total_retenues = total_retenues
         self.salaire_net = self.salaire_brut - self.total_retenues

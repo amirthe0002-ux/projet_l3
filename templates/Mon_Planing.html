@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Planning - Espace Étudiant</title>
+    <link rel="stylesheet" href="{% static 'css/mon_planing.css' %}">
+</head>
+<body>
+    <div class="container">
+        <a href="{% url 'dashboard_etudiant' %}" class="back-btn">← Retour au Tableau de Bord</a>
+
+        <div class="header">
+            <div>
+                <h1>📅 Mon Planning</h1>
+                <p>Emploi du temps et prochains cours</p>
+            </div>
+            <button class="sync-btn">
+                <span>🔄</span>
+                Synchroniser avec Google/Outlook
+            </button>
+        </div>
+
+        <div class="calendar-container">
+            <div class="calendar-header">
+                <div class="month-nav">
+                    <button class="nav-arrow">←</button>
+                    <span class="current-month">Mars 2024</span>
+                    <button class="nav-arrow">→</button>
+                </div>
+                <div class="view-toggle">
+                    <button class="view-btn active">Semaine</button>
+                    <button class="view-btn">Mois</button>
+                    <button class="view-btn">Liste</button>
+                </div>
+            </div>
+
+            <div class="week-view">
+                <div class="time-column">
+                    <div class="day-header" style="height: 69px;"></div>
+                    <div class="time-slot">8:00</div>
+                    <div class="time-slot">9:00</div>
+                    <div class="time-slot">10:00</div>
+                    <div class="time-slot">11:00</div>
+                    <div class="time-slot">12:00</div>
+                    <div class="time-slot">13:00</div>
+                    <div class="time-slot">14:00</div>
+                    <div class="time-slot">15:00</div>
+                    <div class="time-slot">16:00</div>
+                    <div class="time-slot">17:00</div>
+                </div>
+
+                <div class="day-column">
+                    <div class="day-header">
+                        <div class="day-name">Lun</div>
+                        <div class="day-number">18</div>
+                    </div>
+                    <div class="day-content">
+                        <div class="class-event event-english" style="top: 160px; height: 150px;">
+                            <div class="event-time">10:00 - 11:30</div>
+                            <div class="event-title">Anglais B1</div>
+                            <div class="event-room">Salle A12 - Prof. Johnson</div>
+                        </div>
+                        <div class="class-event event-conversation" style="top: 320px; height: 100px;">
+                            <div class="event-time">14:00 - 15:00</div>
+                            <div class="event-title">Conversation</div>
+                            <div class="event-room">Salle B5 - Prof. Smith</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="day-column">
+                    <div class="day-header">
+                        <div class="day-name">Mar</div>
+                        <div class="day-number">19</div>
+                    </div>
+                    <div class="day-content">
+                        <div class="class-event event-spanish" style="top: 80px; height: 150px;">
+                            <div class="event-time">9:00 - 10:30</div>
+                            <div class="event-title">Espagnol A2</div>
+                            <div class="event-room">Salle C3 - Prof. Garcia</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="day-column">
+                    <div class="day-header">
+                        <div class="day-name">Mer</div>
+                        <div class="day-number today">20</div>
+                    </div>
+                    <div class="day-content">
+                        <div class="class-event event-english" style="top: 240px; height: 150px;">
+                            <div class="event-time">11:00 - 12:30</div>
+                            <div class="event-title">Anglais B1</div>
+                            <div class="event-room">Salle A12 - Prof. Johnson</div>
+                        </div>
+                        <div class="class-event event-english" style="top: 400px; height: 150px;">
+                            <div class="event-time">14:00 - 15:30</div>
+                            <div class="event-title">Compréhension Orale</div>
+                            <div class="event-room">Labo Audio - Prof. Johnson</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="day-column">
+                    <div class="day-header">
+                        <div class="day-name">Jeu</div>
+                        <div class="day-number">21</div>
+                    </div>
+                    <div class="day-content">
+                        <div class="class-event event-spanish" style="top: 80px; height: 150px;">
+                            <div class="event-time">9:00 - 10:30</div>
+                            <div class="event-title">Espagnol A2</div>
+                            <div class="event-room">Salle C3 - Prof. Garcia</div>
+                        </div>
+                        <div class="class-event event-conversation" style="top: 400px; height: 100px;">
+                            <div class="event-time">14:00 - 15:00</div>
+                            <div class="event-title">Atelier Conversation</div>
+                            <div class="event-room">Salle B5 - Prof. Smith</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="day-column">
+                    <div class="day-header">
+                        <div class="day-name">Ven</div>
+                        <div class="day-number">22</div>
+                    </div>
+                    <div class="day-content">
+                        <div class="class-event event-english" style="top: 160px; height: 150px;">
+                            <div class="event-time">10:00 - 11:30</div>
+                            <div class="event-title">Anglais B1</div>
+                            <div class="event-room">Salle A12 - Prof. Johnson</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="day-column">
+                    <div class="day-header">
+                        <div class="day-name">Sam</div>
+                        <div class="day-number">23</div>
+                    </div>
+                    <div class="day-content">
+                        <div class="class-event event-conversation" style="top: 80px; height: 100px;">
+                            <div class="event-time">9:00 - 10:00</div>
+                            <div class="event-title">Club Discussion</div>
+                            <div class="event-room">Salle Commune</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="day-column">
+                    <div class="day-header">
+                        <div class="day-name">Dim</div>
+                        <div class="day-number">24</div>
+                    </div>
+                    <div class="day-content"></div>
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #dbeafe; border: 2px solid #2563eb;"></div>
+                    <span>Anglais B1</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fef3c7; border: 2px solid #d97706;"></div>
+                    <span>Espagnol A2</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f3e8ff; border: 2px solid #9333ea;"></div>
+                    <span>Ateliers & Clubs</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div></div>
+
+            <div class="upcoming-card">
+                <div class="upcoming-header">
+                    <h3 class="upcoming-title">⏰ Prochains Cours</h3>
+                    <div class="reminder-toggle">
+                        <span>Rappels SMS</span>
+                        <div class="toggle-switch"></div>
+                    </div>
+                </div>
+
+                <div class="upcoming-list">
+                    <div class="upcoming-item">
+                        <div class="upcoming-time">
+                            <div class="day">Auj.</div>
+                            <div class="hour">14:00</div>
+                        </div>
+                        <div class="upcoming-details">
+                            <h4>Compréhension Orale</h4>
+                            <p>Anglais B1 - Labo Audio</p>
+                            <div class="notification-indicator">
+                                <span>✓</span>
+                                <span>Rappel 30 min avant</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="upcoming-item">
+                        <div class="upcoming-time">
+                            <div class="day">Jeu</div>
+                            <div class="hour">09:00</div>
+                        </div>
+                        <div class="upcoming-details">
+                            <h4>Espagnol A2</h4>
+                            <p>Salle C3 - Prof. Garcia</p>
+                            <div class="notification-indicator">
+                                <span>✓</span>
+                                <span>Rappel activé</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="upcoming-item">
+                        <div class="upcoming-time">
+                            <div class="day">Jeu</div>
+                            <div class="hour">14:00</div>
+                        </div>
+                        <div class="upcoming-details">
+                            <h4>Atelier Conversation</h4>
+                            <p>Salle B5 - Prof. Smith</p>
+                            <div class="notification-indicator">
+                                <span>✓</span>
+                                <span>Rappel activé</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="upcoming-item">
+                        <div class="upcoming-time">
+                            <div class="day">Ven</div>
+                            <div class="hour">10:00</div>
+                        </div>
+                        <div class="upcoming-details">
+                            <h4>Anglais B1</h4>
+                            <p>Salle A12 - Prof. Johnson</p>
+                            <div class="notification-indicator">
+                                <span>✓</span>
+                                <span>Rappel activé</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+<script src="{% static 'js/mon_planing.js' %}"></script>
+</html>

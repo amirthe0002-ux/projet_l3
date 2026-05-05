@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit & Historique - Dashboard Dirigeant</title>
+     <!-- LINK CSS -->
+    <link rel="stylesheet" href="{% static 'css/audit_der.css' %}">
+</head>
+    
+</head>
+<body>
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-72 glass-panel flex flex-col">
+            <div class="p-6 border-b">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #6366f1, #9333ea);">
+                        <i class="fas fa-graduation-cap text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-white">LanguePro</h1>
+                        <p class="text-xs text-slate-400">Espace Dirigeant</p>
+                    </div>
+                </div>
+            </div>
+            <nav class="flex-1 py-6 px-3 space-y-4">
+                <a href="{% url 'dashboard_dirigeant' %}" class="sidebar-link"><i class="fas fa-chart-line"></i>Tableau de Bord</a>
+                 <a href="{% url 'audit' %}" class="sidebar-link active"><i class="fas fa-history text-indigo-400"></i>Audit & Logs</a>
+                <a href="{% url 'utilisateurs' %}" class="sidebar-link"><i class="fas fa-chalkboard-teacher"></i>utilisateur</a>
+                 <a href="{% url 'rapports' %}" class="sidebar-link">
+                    <i class="fas fa-file-alt"></i>
+                    Rapport</a>
+                
+                <a href="#" class="sidebar-link"><i class="fas fa-wallet"></i>Finances</a>
+                  <a href="{% url 'parametres' %}" class="sidebar-link">
+                    <i class="fas fa-cog"></i>
+                    Paramètres
+                <a href="#" class="sidebar-link logout-link">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Déconnexion
+                </a>
+               
+            </nav>
+            <div class="p-4 border-t">
+                <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50">
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff" class="w-10 h-10 rounded-full">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-white truncate">Directeur</p>
+                        <p class="text-xs text-slate-400 truncate">dirigeant@languepro.com</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto bg-slate-900">
+            <header class="sticky top-0 z-20 glass-panel border-b px-8 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Audit & Historique</h2>
+                        <p class="text-sm text-slate-400">Journal complet des actions utilisateurs</p>
+                    </div>
+                    <button onclick="exportAuditLogs()" class="export-btn">
+                        <i class="fas fa-download"></i>Exporter Logs
+                    </button>
+                </div>
+            </header>
+
+            <div class="p-8 space-y-6">
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="glass-panel p-4 flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                            <i class="fas fa-plus text-emerald-400 text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold text-white">{{ audit_counts.CREATE|default:0 }}</p>
+                            <p class="text-sm text-slate-400">Créations</p>
+                        </div>
+                    </div>
+                    <div class="glass-panel p-4 flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                            <i class="fas fa-edit text-blue-400 text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold text-white">{{ audit_counts.UPDATE|default:0 }}</p>
+                            <p class="text-sm text-slate-400">Modifications</p>
+                        </div>
+                    </div>
+                    <div class="glass-panel p-4 flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
+                            <i class="fas fa-trash text-red-400 text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold text-white">{{ audit_counts.DELETE|default:0 }}</p>
+                            <p class="text-sm text-slate-400">Suppressions</p>
+                        </div>
+                    </div>
+                    <div class="glass-panel p-4 flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                            <i class="fas fa-sign-in-alt text-amber-400 text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-2xl font-bold text-white">{{ audit_counts.LOGIN|default:0 }}</p>
+                            <p class="text-sm text-slate-400">Connexions</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="glass-panel p-4">
+                    <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+                        <div class="flex gap-2 flex-wrap">
+                            <button class="filter-btn active" data-filter="all" onclick="applyQuickFilter('all')">Tous</button>
+                            <button class="filter-btn" data-filter="create" onclick="applyQuickFilter('create')">Création</button>
+                            <button class="filter-btn" data-filter="update" onclick="applyQuickFilter('update')">Modification</button>
+                            <button class="filter-btn" data-filter="delete" onclick="applyQuickFilter('delete')">Suppression</button>
+                            <button class="filter-btn" data-filter="login" onclick="applyQuickFilter('login')">Connexion</button>
+                            <button class="filter-btn" data-filter="export" onclick="applyQuickFilter('export')">Export</button>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="relative">
+                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500"></i>
+                                <input type="text" id="search-input" class="search-input" placeholder="Rechercher...">
+                            </div>
+                            <select id="action-filter" class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm">
+                                <option value="">Toutes les actions</option>
+                                <option value="CREATE">Création</option>
+                                <option value="UPDATE">Modification</option>
+                                <option value="DELETE">Suppression</option>
+                                <option value="LOGIN">Connexion</option>
+                                <option value="LOGOUT">Déconnexion</option>
+                                <option value="DOWNLOAD">Téléchargement</option>
+                            </select>
+                            <select id="entity-filter" class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm">
+                                <option value="">Toutes les entités</option>
+                                <option value="Etudiant">Étudiant</option>
+                                <option value="Enseignant">Enseignant</option>
+                                <option value="Groupe">Groupe</option>
+                                <option value="Utilisateur">Utilisateur</option>
+                                <option value="Ressource">Ressource</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Audit List -->
+                <div class="glass-panel overflow-hidden">
+                    <div class="p-4 border-b flex items-center justify-between">
+                        <h3 class="font-semibold text-white">Actions récentes</h3>
+                        <div class="flex gap-2">
+                            <button id="export-btn" onclick="exportFilteredAuditLogs()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded text-sm font-medium transition-colors text-white">
+                                <i class="fas fa-download mr-1"></i>Exporter
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="audit-list" class="divide-y divide-slate-800">
+                        <!-- Les logs d'audit seront chargés dynamiquement ici -->
+                    </div>
+
+                    <!-- Pagination -->
+                    <div id="pagination-container" class="p-4 border-t border-slate-800 flex justify-center">
+                        <!-- La pagination sera générée dynamiquement -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="{% static 'js/audit_der.js' %}"></script>
+</body>
+
+</html>

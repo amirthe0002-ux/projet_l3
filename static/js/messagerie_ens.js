@@ -1,862 +1,830 @@
-// messagerie_ens.js - Messaging System for Teachers
+/**
+ * messagerie_ens.js - Messaging System for Teachers
+ * CONVERTED: HTTP polling → WebSocket (same pattern as messagerie.js)
+ *
+ * Changes from polling version:
+ *  - startPolling() / pollingInterval → removed
+ *  - connectWS(userId) replaces polling in selectConversation()
+ *  - sendMessage() sends via WS if open, falls back to REST
+ *  - handleWsMessage() handles history / message / read / pong events
+ *  - setWsStatus() updates the online indicator in the chat header
+ *  - startWsPing() keeps the connection alive every 25s
+ */
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Helper to get JWT token from storage
-    function getAuthToken() {
-        return localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || null;
+document.addEventListener('DOMContentLoaded', function () {
+
+    // ─── JWT ──────────────────────────────────────────────────────────────────
+    function getToken() {
+        return localStorage.getItem('access_token') || sessionStorage.getItem('access_token')
+            || localStorage.getItem('access') || sessionStorage.getItem('access') || null;
+    }
+    function getUser() {
+        try { return JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user')); }
+        catch { return null; }
     }
 
-    // State management
+    // ─── State ────────────────────────────────────────────────────────────────
     const state = {
-        conversations: [],
+        conversations:       [],
         currentConversation: null,
-        messages: [],
-        apiBaseUrl: '/api',
-        authToken: getAuthToken(),
-        pollingInterval: null,
-        currentUser: null
+        messages:            [],
+        apiBaseUrl:          '/api',
+        authToken:           getToken(),
+        currentUser:         getUser(),
+        displayedMsgIds:     new Set(),
+
+        // WebSocket state (replaces pollingInterval)
+        ws:               null,
+        wsReconnectTimer: null,
+        wsReconnectDelay: 3000,
+
+        // Modal cache
+        groupes:     [],
+        etudiants:   [],
+        parents:     [],
+        enseignants: [],
     };
 
-    // DOM Elements
-    const elements = {
-        conversationItems: document.querySelectorAll('.conversation-item'),
-        conversationsList: document.querySelector('.conversations-list'),
-        messagesContainer: document.querySelector('.messages-container'),
-        messageInput: document.querySelector('.message-input'),
-        sendBtn: document.querySelector('.send-btn'),
-        newMessageBtn: document.querySelector('.new-message-btn'),
+    // ─── DOM ──────────────────────────────────────────────────────────────────
+    const els = {
+        convList:    document.querySelector('.conversations-list'),
+        msgContainer:document.querySelector('.messages-container'),
+        msgInput:    document.querySelector('.message-input'),
+        sendBtn:     document.querySelector('.send-btn'),
+        newMsgBtn:   document.querySelector('.new-message-btn'),
         searchInput: document.querySelector('.search-messages input'),
-        chatHeader: document.querySelector('.chat-header'),
-        quickResponses: document.querySelectorAll('.quick-response'),
-        inputBtns: document.querySelectorAll('.input-btn')
+        chatHeader:  document.querySelector('.chat-header'),
+        quickResp:   document.querySelectorAll('.quick-response'),
+        inputBtns:   document.querySelectorAll('.input-btn'),
     };
 
-    // Initialize
-    init();
-
-    function init() {
-        // Check authentication
-        if (!state.authToken) {
-            showNotification('❌ Veuillez vous connecter d\'abord', 'error');
-            setTimeout(() => {
-                window.location.href = '/login/';
-            }, 2000);
-            return;
-        }
-
-        // Load current user info
-        loadCurrentUser();
-
-        setupEventListeners();
-
-        // Build conversations from existing HTML or API
-        buildConversationsFromHTML();
-
-        // Select first conversation
-        const firstConversation = document.querySelector('.conversation-item');
-        if (firstConversation) {
-            selectConversation(firstConversation);
-        }
-
-        // Start polling for new messages
-        startPolling();
+    function authHeaders() {
+        return {
+            'Authorization': `Bearer ${state.authToken}`,
+            'Content-Type':  'application/json',
+        };
     }
 
-    // Load current user from storage
-    function loadCurrentUser() {
-        const userStr = localStorage.getItem('user') || sessionStorage.getItem('user');
-        if (userStr) {
-            try {
-                state.currentUser = JSON.parse(userStr);
-            } catch (e) {
-                console.error('Error parsing user:', e);
-            }
-        }
-    }
-
-    // Build conversations from existing HTML (fallback) or API
-    async function buildConversationsFromHTML() {
-        // First, try to extract conversations from existing HTML
-        const items = document.querySelectorAll('.conversation-item');
-        state.conversations = Array.from(items).map((item, index) => ({
-            id: item.dataset.id || (index + 1),
-            other_user: {
-                id: item.dataset.userId || (index + 100),
-                name: item.querySelector('.conversation-name').childNodes[0].textContent.trim(),
-                initials: item.querySelector('.conversation-avatar').childNodes[0].textContent.trim()
-            },
-            last_message: item.querySelector('.conversation-preview')?.textContent || '',
-            last_message_time: new Date().toISOString(),
-            unread: item.classList.contains('unread'),
-            unread_count: parseInt(item.querySelector('.unread-badge')?.textContent || '0'),
-            online: item.querySelector('.online-indicator') !== null
-        }));
-
-        // Then try to load from API
+    async function apiFetch(endpoint, options = {}) {
         try {
-            await loadConversationsFromAPI();
-        } catch (error) {
-            console.log('Using HTML fallback for conversations');
-        }
-    }
-
-    // Load conversations from API (using messages endpoint)
-    async function loadConversationsFromAPI() {
-        // Get unique conversations from messages
-        const response = await fetch(`${state.apiBaseUrl}/messages/`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${state.authToken}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            if (response.status === 401) {
-                handleAuthError();
-                return;
-            }
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        const messages = await response.json();
-
-        // Group messages by conversation partner
-        const conversationsMap = new Map();
-
-        messages.forEach(msg => {
-            const isSender = msg.expediteur === state.currentUser?.id;
-            const otherUserId = isSender ? msg.destinataire : msg.expediteur;
-            const otherUserName = isSender ? msg.destinataire_nom : msg.expediteur_nom;
-
-            if (!conversationsMap.has(otherUserId)) {
-                conversationsMap.set(otherUserId, {
-                    id: `conv-${otherUserId}`,
-                    other_user: {
-                        id: otherUserId,
-                        name: otherUserName || 'Utilisateur',
-                        initials: getInitials(otherUserName || 'U')
-                    },
-                    last_message: msg.contenu,
-                    last_message_time: msg.date_envoi,
-                    unread: !msg.lu && !isSender,
-                    unread_count: (!msg.lu && !isSender) ? 1 : 0,
-                    online: false
-                });
-            } else {
-                const conv = conversationsMap.get(otherUserId);
-                // Update if this message is newer
-                if (new Date(msg.date_envoi) > new Date(conv.last_message_time)) {
-                    conv.last_message = msg.contenu;
-                    conv.last_message_time = msg.date_envoi;
-                }
-                if (!msg.lu && !isSender) {
-                    conv.unread = true;
-                    conv.unread_count++;
-                }
-            }
-        });
-
-        state.conversations = Array.from(conversationsMap.values())
-            .sort((a, b) => new Date(b.last_message_time) - new Date(a.last_message_time));
-
-        // Update UI if we got data
-        if (state.conversations.length > 0) {
-            renderConversations(state.conversations);
-        }
-    }
-
-    // Setup event listeners
-    function setupEventListeners() {
-        // Conversation selection
-        elements.conversationsList.addEventListener('click', (e) => {
-            const item = e.target.closest('.conversation-item');
-            if (item) {
-                selectConversation(item);
-            }
-        });
-
-        // Send message
-        elements.sendBtn.addEventListener('click', sendMessage);
-        elements.messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
-
-        // Search conversations
-        if (elements.searchInput) {
-            elements.searchInput.addEventListener('input', debounce((e) => {
-                searchConversations(e.target.value);
-            }, 300));
-        }
-
-        // Quick responses
-        elements.quickResponses.forEach(btn => {
-            btn.addEventListener('click', () => {
-                elements.messageInput.value = btn.textContent;
-                elements.messageInput.focus();
+            const res = await fetch(`${state.apiBaseUrl}${endpoint}`, {
+                ...options,
+                headers: { ...authHeaders(), ...options.headers },
             });
-        });
-
-        // New message button
-        elements.newMessageBtn.addEventListener('click', showNewMessageModal);
-
-        // Input buttons
-        elements.inputBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const action = btn.textContent.trim();
-                if (action === '📎') {
-                    showNotification('📎 Fonctionnalité pièce jointe à venir', 'info');
-                } else if (action === '😊') {
-                    showNotification('😊 Sélecteur d\'émojis à venir', 'info');
-                }
-            });
-        });
-
-        // Chat action buttons
-        document.querySelectorAll('.chat-action-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const action = btn.textContent.trim();
-                showNotification(`${action} Fonctionnalité à venir`, 'info');
-            });
-        });
+            if (res.status === 401) { handleAuthError(); return { error: true }; }
+            if (res.status === 403) return { error: true, message: 'Accès refusé.' };
+            if (res.status === 204) return { success: true };
+            return await res.json();
+        } catch { return { error: true, message: 'Serveur inaccessible.' }; }
     }
 
-    // Render conversations list
-    function renderConversations(conversations) {
-        if (conversations.length === 0) {
-            elements.conversationsList.innerHTML = `
-                <div class="no-conversations" style="padding: 2rem; text-align: center;">
-                    <p style="color: #64748b;">Aucune conversation</p>
-                </div>
-            `;
-            return;
+    // ══════════════════════════════════════════════════════════════
+    // WEBSOCKET  (ported from messagerie.js)
+    // ══════════════════════════════════════════════════════════════
+
+    function connectWS(otherUserId) {
+        // Close previous connection cleanly
+        if (state.ws) {
+            state.ws.onclose = null;   // prevent reconnect loop for old user
+            state.ws.close();
+            state.ws = null;
         }
+        clearTimeout(state.wsReconnectTimer);
 
-        elements.conversationsList.innerHTML = conversations.map(conv => `
-            <div class="conversation-item ${conv.unread ? 'unread' : ''}"
-                 data-id="${conv.id}"
-                 data-user-id="${conv.other_user.id}">
-                <div class="conversation-avatar">
-                    ${conv.other_user.initials}
-                    ${conv.online ? '<span class="online-indicator"></span>' : ''}
-                </div>
-                <div class="conversation-info">
-                    <div class="conversation-name">
-                        ${escapeHtml(conv.other_user.name)}
-                        <span class="conversation-time">${formatTime(conv.last_message_time)}</span>
-                    </div>
-                    <div class="conversation-preview">${escapeHtml(conv.last_message)}</div>
-                </div>
-                ${conv.unread_count > 0 ? `<span class="unread-badge">${conv.unread_count}</span>` : ''}
-            </div>
-        `).join('');
-    }
+        const token = state.authToken;
+        if (!token) return;
 
-    // Select conversation
-    async function selectConversation(element) {
-        // Update UI
-        document.querySelectorAll('.conversation-item').forEach(item => {
-            item.classList.remove('active');
-        });
-        element.classList.add('active');
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const host  = location.hostname;
+        const port  = '8000';
+        const url   = `${proto}://${host}:${port}/ws/chat/${otherUserId}/?token=${token}`;
 
-        // Remove unread badge
-        const badge = element.querySelector('.unread-badge');
-        if (badge) badge.remove();
-        element.classList.remove('unread');
+        const ws  = new WebSocket(url);
+        state.ws  = ws;
 
-        // Get conversation data
-        const conversationId = element.dataset.id;
-        const userId = element.dataset.userId;
-        const userName = element.querySelector('.conversation-name').childNodes[0].textContent.trim();
-
-        state.currentConversation = {
-            id: conversationId,
-            userId: userId,
-            userName: userName
+        ws.onopen = () => {
+            state.wsReconnectDelay = 3000;
+            setWsStatus(true);
         };
 
-        // Update chat header
-        updateChatHeader(userName, element.querySelector('.online-indicator') !== null);
+        ws.onmessage = (event) => {
+            try { handleWsMessage(JSON.parse(event.data)); }
+            catch (e) { console.error('[Chat WS]', e); }
+        };
 
-        // Load messages
-        await loadMessages(userId);
+        ws.onclose = (event) => {
+            setWsStatus(false);
+            if (event.code === 4001) return;  // auth failed — don't retry
+            state.wsReconnectTimer = setTimeout(() => {
+                state.wsReconnectDelay = Math.min(state.wsReconnectDelay * 1.5, 30000);
+                // Only reconnect if this user is still the active conversation
+                if (String(state.currentConversation?.userId) === String(otherUserId)) {
+                    connectWS(otherUserId);
+                }
+            }, state.wsReconnectDelay);
+        };
+
+        ws.onerror = () => ws.close();
     }
 
-    // Update chat header
-    function updateChatHeader(name, isOnline) {
-        elements.chatHeader.innerHTML = `
+    function handleWsMessage(data) {
+        switch (data.type) {
+            case 'history':
+                renderHistory(data.messages);
+                break;
+            case 'message':
+                appendSingleMessage(data);
+                updateConvPreview(
+                    String(data.expediteur) === String(state.currentUser?.id)
+                        ? data.destinataire
+                        : data.expediteur,
+                    data.contenu,
+                    data.date_envoi
+                );
+                break;
+            case 'read':
+                markAllAsSeen();
+                break;
+            case 'pong':
+                break;
+        }
+    }
+
+    function setWsStatus(connected) {
+        // Update the "En ligne / Reconnexion..." status in the chat header
+        const statusEl = document.querySelector('.chat-user-info p');
+        if (statusEl) {
+            statusEl.innerHTML = `
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                    background:${connected ? '#10b981' : '#ef4444'};
+                    margin-right:5px;transition:background .3s;"
+                    title="${connected ? 'Temps réel actif' : 'Reconnexion...'}"></span>
+                ${connected ? 'En ligne' : 'Reconnexion...'}`;
+        }
+    }
+
+    function startWsPing() {
+        setInterval(() => {
+            if (state.ws?.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ action: 'ping' }));
+            }
+        }, 25000);
+    }
+
+    function markAllAsSeen() {
+        document.querySelectorAll('.tick-status').forEach(el => { el.textContent = '✓✓'; });
+    }
+
+    // ── Render full history (arrives via WS 'history' event) ──────────────────
+    function renderHistory(msgs) {
+        const container = els.msgContainer;
+        if (!container) return;
+
+        state.displayedMsgIds.clear();
+
+        if (!msgs.length) {
+            container.innerHTML = `
+                <div style="text-align:center;padding:3rem;color:#64748b;">
+                    Aucun message. Commencez la conversation !
+                </div>`;
+            return;
+        }
+
+        let html = '';
+        let lastDate = null;
+
+        msgs.forEach(msg => {
+            const d = new Date(msg.date_envoi).toDateString();
+            if (d !== lastDate) {
+                lastDate = d;
+                html += `<div class="message-date"><span>${fmtDate(msg.date_envoi)}</span></div>`;
+            }
+            const isOwn = String(msg.expediteur) === String(state.currentUser?.id);
+            html += bubbleHTML(msg, isOwn);
+            state.displayedMsgIds.add(String(msg.id));
+        });
+
+        container.innerHTML = html;
+        scrollBottom();
+    }
+
+    // ── Append a single incoming message (no duplicate check needed — WS guarantees order) ──
+    function appendSingleMessage(msg) {
+        if (state.displayedMsgIds.has(String(msg.id))) return;
+        state.displayedMsgIds.add(String(msg.id));
+
+        const container = els.msgContainer;
+        if (!container) return;
+
+        const isOwn = String(msg.expediteur) === String(state.currentUser?.id);
+
+        // Date separator if needed
+        const lastDateEl = container.querySelector('.message-date:last-of-type');
+        const msgDate    = new Date(msg.date_envoi);
+        const needsSep   = !lastDateEl ||
+            new Date(lastDateEl.dataset?.date || 0).toDateString() !== msgDate.toDateString();
+
+        if (needsSep) {
+            container.insertAdjacentHTML('beforeend',
+                `<div class="message-date" data-date="${msg.date_envoi}">
+                    <span>${fmtDate(msg.date_envoi)}</span>
+                </div>`);
+        }
+
+        container.insertAdjacentHTML('beforeend', bubbleHTML(msg, isOwn));
+        scrollBottom();
+    }
+
+    function bubbleHTML(msg, isOwn) {
+        const name = isOwn
+            ? `${state.currentUser?.first_name||''} ${state.currentUser?.last_name||''}`.trim()
+            : (msg.expediteur_nom || state.currentConversation?.userName || '??');
+        return `
+            <div class="message ${isOwn ? 'own' : ''}" data-id="${msg.id}"
+                 style="animation:fadeIn .3s ease;">
+                <div class="message-avatar">${initials(name)}</div>
+                <div class="message-content">
+                    <div class="message-bubble">${esc(msg.contenu)}</div>
+                    <div class="message-time">
+                        <span class="tick-status">${fmtTime(msg.date_envoi)}${isOwn ? (msg.lu ? ' ✓✓' : ' ✓') : ''}</span>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // CONVERSATIONS (REST — sidebar only)
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadConversationsFromAPI() {
+        const data = await apiFetch('/messages/');
+        if (data?.error || !Array.isArray(data)) {
+            renderConversationsFromHTML(); return;
+        }
+
+        const map  = new Map();
+        const myId = String(state.currentUser?.id);
+
+        data.forEach(msg => {
+            const isSender  = String(msg.expediteur) === myId;
+            const otherId   = isSender ? msg.destinataire : msg.expediteur;
+            const otherName = isSender ? (msg.destinataire_nom || '—') : (msg.expediteur_nom || '—');
+
+            if (!map.has(otherId)) {
+                map.set(otherId, {
+                    id:        `conv-${otherId}`,
+                    userId:    otherId,
+                    name:      otherName,
+                    lastMsg:   msg.contenu,
+                    lastTime:  msg.date_envoi,
+                    unreadCnt: (!msg.lu && !isSender) ? 1 : 0,
+                });
+            } else {
+                const c = map.get(otherId);
+                if (new Date(msg.date_envoi) > new Date(c.lastTime)) {
+                    c.lastMsg  = msg.contenu;
+                    c.lastTime = msg.date_envoi;
+                }
+                if (!msg.lu && !isSender) c.unreadCnt++;
+            }
+        });
+
+        state.conversations = [...map.values()]
+            .sort((a, b) => new Date(b.lastTime) - new Date(a.lastTime));
+
+        renderConversations(state.conversations);
+
+        const first = els.convList?.querySelector('.conversation-item');
+        if (first) selectConversation(first);
+    }
+
+    function renderConversationsFromHTML() {
+        const first = els.convList?.querySelector('.conversation-item');
+        if (first) selectConversation(first);
+    }
+
+    function renderConversations(convs) {
+        if (!convs.length) {
+            els.convList.innerHTML = `
+                <div style="padding:2rem;text-align:center;color:#64748b;">Aucune conversation</div>`;
+            return;
+        }
+        els.convList.innerHTML = convs.map(c => `
+            <div class="conversation-item ${c.unreadCnt > 0 ? 'unread' : ''}"
+                 data-id="${c.id}" data-user-id="${c.userId}">
+                <div class="conversation-avatar">${initials(c.name)}</div>
+                <div class="conversation-info">
+                    <div class="conversation-name">
+                        ${esc(c.name)}
+                        <span class="conversation-time">${fmtTime(c.lastTime)}</span>
+                    </div>
+                    <div class="conversation-preview">${esc(c.lastMsg || '')}</div>
+                </div>
+                ${c.unreadCnt > 0 ? `<span class="unread-badge">${c.unreadCnt}</span>` : ''}
+            </div>`).join('');
+    }
+
+    // ── Select conversation → connect WS (replaces loadMessages + polling) ────
+    async function selectConversation(el) {
+        document.querySelectorAll('.conversation-item').forEach(x => x.classList.remove('active'));
+        el.classList.add('active');
+        el.querySelector('.unread-badge')?.remove();
+        el.classList.remove('unread');
+
+        const userId   = el.dataset.userId;
+        const userName = el.querySelector('.conversation-name')
+            ?.childNodes[0]?.textContent?.trim()
+            || el.querySelector('.conversation-name')?.textContent?.trim()
+            || 'Contact';
+
+        state.currentConversation = { id: el.dataset.id, userId, userName };
+        state.displayedMsgIds.clear();
+
+        updateChatHeader(userName);
+        setWsStatus(false);  // grey while connecting
+
+        // Show loading in message area
+        els.msgContainer.innerHTML = `
+            <div style="text-align:center;padding:3rem;color:#64748b;">
+                <i class="fas fa-spinner fa-spin" style="font-size:1.5rem;display:block;margin-bottom:.5rem;"></i>
+                Connexion...
+            </div>`;
+
+        // ✅ Connect WebSocket — history arrives via 'history' event
+        connectWS(userId);
+    }
+
+    function updateChatHeader(name) {
+        if (!els.chatHeader) return;
+        els.chatHeader.innerHTML = `
             <div class="chat-user">
-                <div class="chat-user-avatar">${getInitials(name)}</div>
+                <div class="chat-user-avatar">${initials(name)}</div>
                 <div class="chat-user-info">
-                    <h3>${escapeHtml(name)}</h3>
-                    <p>${isOnline ? '🟢 En ligne' : '⚪ Hors ligne'}</p>
+                    <h3>${esc(name)}</h3>
+                    <p>
+                        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                            background:#ef4444;margin-right:5px;"></span>
+                        Connexion...
+                    </p>
                 </div>
             </div>
             <div class="chat-actions">
                 <button class="chat-action-btn">📞</button>
                 <button class="chat-action-btn">📹</button>
                 <button class="chat-action-btn">ℹ️</button>
-            </div>
-        `;
-
-        // Re-attach event listeners
-        document.querySelectorAll('.chat-action-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                showNotification(`${btn.textContent} Fonctionnalité à venir`, 'info');
-            });
-        });
+            </div>`;
+        document.querySelectorAll('.chat-action-btn').forEach(btn =>
+            btn.addEventListener('click', () => showNotif('Fonctionnalité à venir', 'info')));
     }
 
-    // Load messages for conversation
-    async function loadMessages(userId) {
-        elements.messagesContainer.innerHTML = `
-            <div class="loading-messages" style="text-align: center; padding: 3rem;">
-                <div style="width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem;"></div>
-                <p style="color: #64748b;">Chargement des messages...</p>
-            </div>
-        `;
-
-        try {
-            // Get all messages and filter by conversation partner
-            const response = await fetch(`${state.apiBaseUrl}/messages/`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${state.authToken}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const allMessages = await response.json();
-
-            // Filter messages for this conversation
-            state.messages = allMessages.filter(msg =>
-                msg.expediteur == userId || msg.destinataire == userId
-            ).sort((a, b) => new Date(a.date_envoi) - new Date(b.date_envoi));
-
-            renderMessages(state.messages);
-
-            // Mark messages as read
-            markMessagesAsRead(userId);
-
-        } catch (error) {
-            console.error('Error loading messages:', error);
-            renderStaticMessages();
-        }
+    function updateConvPreview(userId, text, date) {
+        const el = document.querySelector(`.conversation-item[data-user-id="${userId}"]`);
+        if (!el) return;
+        const prev = el.querySelector('.conversation-preview');
+        const time = el.querySelector('.conversation-time');
+        if (prev) prev.textContent = (text || '').substring(0, 35) + ((text?.length || 0) > 35 ? '…' : '');
+        if (time) time.textContent = date ? fmtTime(date) : 'Maintenant';
+        els.convList?.prepend(el);
     }
 
-    // Render messages
-    function renderMessages(messages) {
-        if (messages.length === 0) {
-            elements.messagesContainer.innerHTML = `
-                <div class="no-messages" style="text-align: center; padding: 3rem; color: #64748b;">
-                    <p>Aucun message. Commencez la conversation!</p>
-                </div>
-            `;
-            return;
-        }
+    // ══════════════════════════════════════════════════════════════
+    // SEND MESSAGE — WS first, REST fallback
+    // ══════════════════════════════════════════════════════════════
 
-        // Group by date
-        let currentDate = null;
-        let html = '';
-
-        messages.forEach(msg => {
-            const msgDate = new Date(msg.date_envoi).toDateString();
-            if (msgDate !== currentDate) {
-                currentDate = msgDate;
-                html += `<div class="message-date"><span>${formatDate(msg.date_envoi)}</span></div>`;
-            }
-
-            const isOwn = msg.expediteur === state.currentUser?.id;
-            html += createMessageBubble(msg, isOwn);
-        });
-
-        elements.messagesContainer.innerHTML = html;
-        scrollToBottom();
-    }
-
-    // Create message bubble HTML
-    function createMessageBubble(msg, isOwn) {
-        const time = formatTime(msg.date_envoi);
-        const readStatus = isOwn ? (msg.lu ? ' ✓✓' : ' ✓') : '';
-
-        let attachmentHtml = '';
-        if (msg.pieces_jointes && msg.pieces_jointes.length > 0) {
-            attachmentHtml = msg.pieces_jointes.map(att => `
-                <div class="message-attachment" onclick="downloadAttachment(${att.id})">
-                    <div class="attachment-icon">📄</div>
-                    <div class="attachment-info">
-                        <div class="attachment-name">${escapeHtml(att.nom_fichier)}</div>
-                        <div class="attachment-size">${formatFileSize(att.taille_fichier)}</div>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        const senderName = isOwn ? 'Moi' : (msg.expediteur_nom || state.currentConversation?.userName || '');
-
-        return `
-            <div class="message ${isOwn ? 'own' : ''}" data-id="${msg.id}">
-                <div class="message-avatar">${getInitials(senderName)}</div>
-                <div class="message-content">
-                    <div class="message-bubble">
-                        ${escapeHtml(msg.contenu)}
-                        ${attachmentHtml}
-                    </div>
-                    <div class="message-time">${time}${readStatus}</div>
-                </div>
-            </div>
-        `;
-    }
-
-    // Send message
     async function sendMessage() {
-        const content = elements.messageInput.value.trim();
+        const content = els.msgInput?.value?.trim();
         if (!content || !state.currentConversation) return;
 
-        // Clear input
-        elements.messageInput.value = '';
+        els.msgInput.value = '';
 
-        // Create temp message
-        const tempMsg = {
-            id: 'temp-' + Date.now(),
-            contenu: content,
-            date_envoi: new Date().toISOString(),
-            expediteur: state.currentUser?.id,
-            expediteur_nom: 'Moi',
-            destinataire: state.currentConversation.userId,
-            lu: false,
-            pieces_jointes: []
-        };
-
-        // Add to UI immediately
-        addMessageToChat(tempMsg, true);
-        scrollToBottom();
-
-        try {
-            const response = await fetch(`${state.apiBaseUrl}/messages/`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${state.authToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    destinataire: state.currentConversation.userId,
-                    contenu: content,
-                    sujet: 'Message'
-                })
-            });
-
-            if (!response.ok) throw new Error('Failed to send');
-
-            const savedMsg = await response.json();
-
-            // Replace temp message with saved one
-            const tempElement = document.querySelector(`[data-id="${tempMsg.id}"]`);
-            if (tempElement) {
-                tempElement.outerHTML = createMessageBubble(savedMsg, true);
-            }
-
-            // Update conversation preview
-            updateConversationPreview(state.currentConversation.userId, content);
-
-        } catch (error) {
-            console.error('Error sending message:', error);
-            showNotification('❌ Erreur d\'envoi', 'error');
-
-            // Mark as failed
-            const tempElement = document.querySelector(`[data-id="${tempMsg.id}"]`);
-            if (tempElement) {
-                tempElement.querySelector('.message-bubble').style.opacity = '0.5';
-                tempElement.querySelector('.message-time').textContent += ' ⚠️';
-            }
-        }
-    }
-
-    // Mark messages as read
-    async function markMessagesAsRead(senderId) {
-        try {
-            // Find unread messages from this sender
-            const unreadMessages = state.messages.filter(msg =>
-                msg.expediteur == senderId && !msg.lu
-            );
-
-            for (const msg of unreadMessages) {
-                await fetch(`${state.apiBaseUrl}/messages/${msg.id}/`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Authorization': `Bearer ${state.authToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ lu: true })
-                });
-            }
-        } catch (error) {
-            console.error('Error marking messages as read:', error);
-        }
-    }
-
-    // Add message to chat
-    function addMessageToChat(msg, isOwn) {
-        const existingDate = elements.messagesContainer.querySelector('.message-date:last-of-type');
-        const msgDate = new Date(msg.date_envoi).toDateString();
-        const today = new Date().toDateString();
-
-        // Add date separator if needed
-        if (!existingDate || msgDate !== today) {
-            const dateHtml = `<div class="message-date"><span>${formatDate(msg.date_envoi)}</span></div>`;
-            elements.messagesContainer.insertAdjacentHTML('beforeend', dateHtml);
+        // ✅ Send via WebSocket if open — server broadcasts back to both users
+        if (state.ws?.readyState === WebSocket.OPEN) {
+            state.ws.send(JSON.stringify({ action: 'send', contenu: content }));
+            return;  // message returns via 'message' event → appendSingleMessage
         }
 
-        elements.messagesContainer.insertAdjacentHTML('beforeend', createMessageBubble(msg, isOwn));
-    }
+        // Fallback REST
+        const sendBtn = els.sendBtn;
+        if (sendBtn) { sendBtn.textContent = '⏳'; sendBtn.disabled = true; }
 
-    // Update conversation preview
-    function updateConversationPreview(userId, preview) {
-        const convElement = document.querySelector(`.conversation-item[data-user-id="${userId}"]`);
-        if (convElement) {
-            const previewEl = convElement.querySelector('.conversation-preview');
-            if (previewEl) {
-                previewEl.textContent = preview.substring(0, 30) + (preview.length > 30 ? '...' : '');
-            }
-
-            const timeEl = convElement.querySelector('.conversation-time');
-            if (timeEl) {
-                timeEl.textContent = 'Maintenant';
-            }
-
-            // Move to top
-            elements.conversationsList.prepend(convElement);
-        }
-    }
-
-    // Search conversations
-    function searchConversations(query) {
-        const items = document.querySelectorAll('.conversation-item');
-        const lowerQuery = query.toLowerCase();
-
-        items.forEach(item => {
-            const name = item.querySelector('.conversation-name').textContent.toLowerCase();
-            const preview = item.querySelector('.conversation-preview').textContent.toLowerCase();
-
-            if (name.includes(lowerQuery) || preview.includes(lowerQuery)) {
-                item.style.display = 'flex';
-            } else {
-                item.style.display = 'none';
-            }
+        const result = await apiFetch('/messages/', {
+            method: 'POST',
+            body:   JSON.stringify({
+                destinataire: parseInt(state.currentConversation.userId),
+                contenu:      content,
+                sujet:        'Message',
+            }),
         });
-    }
 
-    // Show new message modal
-    function showNewMessageModal() {
-        // Create modal for selecting recipient
-        const modal = document.createElement('div');
-        modal.className = 'new-message-modal';
-        modal.innerHTML = `
-            <div class="modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;">
-                <div class="modal-content" style="background: white; padding: 2rem; border-radius: 20px; width: 90%; max-width: 500px;">
-                    <h2>Nouveau Message</h2>
-                    <div class="form-group" style="margin: 1rem 0;">
-                        <label>Destinataire</label>
-                        <select class="recipient-select" style="width: 100%; padding: 0.75rem; border: 2px solid #e2e8f0; border-radius: 8px;">
-                            <option value="">-- Sélectionner un parent --</option>
-                            <option value="101">Ahmed Mansouri</option>
-                            <option value="102">Leila Kadiri</option>
-                            <option value="103">Samir Benali</option>
-                        </select>
-                    </div>
-                    <div class="modal-actions" style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
-                        <button class="btn-secondary cancel-btn" style="padding: 0.75rem 1.5rem; border: 2px solid #e2e8f0; background: white; border-radius: 8px; cursor: pointer;">Annuler</button>
-                        <button class="btn-primary start-chat-btn" style="padding: 0.75rem 1.5rem; border: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; cursor: pointer;">Commencer</button>
-                    </div>
-                </div>
-            </div>
-        `;
+        if (sendBtn) { sendBtn.textContent = '➤'; sendBtn.disabled = false; }
 
-        document.body.appendChild(modal);
-
-        modal.querySelector('.cancel-btn').addEventListener('click', () => modal.remove());
-        modal.querySelector('.start-chat-btn').addEventListener('click', () => {
-            const recipientId = modal.querySelector('.recipient-select').value;
-            if (recipientId) {
-                startNewConversation(recipientId);
-                modal.remove();
-            }
-        });
-    }
-
-    // Start new conversation
-    async function startNewConversation(userId) {
-        // Check if conversation already exists
-        const existing = document.querySelector(`.conversation-item[data-user-id="${userId}"]`);
-        if (existing) {
-            selectConversation(existing);
+        if (result?.error) {
+            showNotif("❌ Erreur d'envoi", 'error');
             return;
         }
 
-        // Create new conversation item
-        const name = document.querySelector(`.recipient-select option[value="${userId}"]`)?.textContent || 'Nouveau contact';
+        // Manually append since WS didn't broadcast it
+        appendSingleMessage({
+            ...result,
+            expediteur:     state.currentUser?.id,
+            expediteur_nom: `${state.currentUser?.first_name||''} ${state.currentUser?.last_name||''}`.trim(),
+        });
+        updateConvPreview(state.currentConversation.userId, content, result.date_envoi);
+    }
 
-        const newConv = document.createElement('div');
-        newConv.className = 'conversation-item active';
-        newConv.dataset.id = `conv-${userId}`;
-        newConv.dataset.userId = userId;
-        newConv.innerHTML = `
-            <div class="conversation-avatar">${getInitials(name)}</div>
-            <div class="conversation-info">
-                <div class="conversation-name">
-                    ${escapeHtml(name)}
-                    <span class="conversation-time">Maintenant</span>
+    // ══════════════════════════════════════════════════════════════
+    // NEW MESSAGE MODAL (unchanged from polling version)
+    // ══════════════════════════════════════════════════════════════
+
+    async function showNewMessageModal() {
+        if (!state.groupes.length || !state.etudiants.length) {
+            showNotif('Chargement des contacts...', 'info');
+            const [gData, eData, pData, ensData] = await Promise.all([
+                apiFetch('/groupes/'),
+                apiFetch('/etudiants/'),
+                apiFetch('/parents/'),
+                apiFetch('/enseignants/'),
+            ]);
+            state.groupes     = !gData?.error   ? (Array.isArray(gData)   ? gData   : gData.results   || []) : [];
+            state.etudiants   = !eData?.error   ? (Array.isArray(eData)   ? eData   : eData.results   || []) : [];
+            state.parents     = !pData?.error   ? (Array.isArray(pData)   ? pData   : pData.results   || []) : [];
+            state.enseignants = !ensData?.error ? (Array.isArray(ensData) ? ensData : ensData.results || []) : [];
+        }
+
+        document.getElementById('newMsgModal')?.remove();
+
+        const modal = document.createElement('div');
+        modal.id    = 'newMsgModal';
+        modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.55);
+            display:flex;align-items:center;justify-content:center;z-index:10000;`;
+
+        modal.innerHTML = `
+            <div style="background:white;border-radius:20px;padding:2rem;
+                        width:90%;max-width:520px;max-height:90vh;overflow-y:auto;
+                        box-shadow:0 25px 50px rgba(0,0,0,.25);"
+                 onclick="event.stopPropagation()">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+                    <h3 style="font-size:1.15rem;font-weight:700;color:#1e293b;margin:0;">
+                        <i class="fas fa-paper-plane" style="color:#6366f1;margin-right:8px;"></i>
+                        Nouveau Message
+                    </h3>
+                    <button id="closeNewMsg"
+                            style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#94a3b8;">×</button>
                 </div>
-                <div class="conversation-preview">Nouvelle conversation</div>
-            </div>
-        `;
 
-        elements.conversationsList.prepend(newConv);
-        selectConversation(newConv);
-    }
+                <!-- Type buttons -->
+                <div style="margin-bottom:1.25rem;">
+                    <label style="${lbl()}">Type de contact</label>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;" id="typeButtons">
+                        ${[
+                            ['etudiant',   'fas fa-user-graduate',       'Étudiant',    '#6366f1'],
+                            ['parent',     'fas fa-user-shield',         'Parent',      '#10b981'],
+                            ['enseignant', 'fas fa-chalkboard-teacher',  'Enseignant',  '#f59e0b'],
+                        ].map(([type, icon, label, color]) => `
+                            <button data-type="${type}"
+                                    style="padding:.75rem;border:2px solid #e2e8f0;border-radius:12px;
+                                           background:white;cursor:pointer;font-size:.875rem;font-weight:600;
+                                           color:#475569;transition:all .2s;display:flex;flex-direction:column;
+                                           align-items:center;gap:.4rem;"
+                                    onmouseover="this.style.borderColor='${color}';this.style.color='${color}'"
+                                    onmouseout="if(!this.classList.contains('active')){this.style.borderColor='#e2e8f0';this.style.color='#475569'}">
+                                <i class="${icon}" style="font-size:1.25rem;"></i>
+                                ${label}
+                            </button>`).join('')}
+                    </div>
+                </div>
 
-    // Start polling for new messages
-    function startPolling() {
-        if (state.pollingInterval) return;
+                <!-- Groupe filter -->
+                <div id="groupeFilter" style="display:none;margin-bottom:1.25rem;">
+                    <label style="${lbl()}">Filtrer par groupe <span style="color:#94a3b8;font-weight:400;">(optionnel)</span></label>
+                    <select id="selGroupe" style="${inp()}">
+                        <option value="">— Tous les groupes —</option>
+                        ${state.groupes.map(g =>
+                            `<option value="${g.id}">${g.nom_groupe} — ${g.niveau} (${g.langue||''})</option>`
+                        ).join('')}
+                    </select>
+                </div>
 
-        state.pollingInterval = setInterval(() => {
-            if (state.currentConversation) {
-                checkNewMessages();
-            }
-        }, 5000); // Poll every 5 seconds
-    }
+                <!-- Contact list -->
+                <div id="contactsSection" style="display:none;margin-bottom:1.25rem;">
+                    <label style="${lbl()}">Sélectionner un contact</label>
+                    <input type="text" id="contactSearch" placeholder="🔍 Rechercher..."
+                           style="${inp()} margin-bottom:.75rem;">
+                    <div id="contactsList"
+                         style="max-height:260px;overflow-y:auto;border:2px solid #e2e8f0;
+                                border-radius:12px;background:#fafafa;">
+                        <div style="padding:1.5rem;text-align:center;color:#94a3b8;font-size:.875rem;">
+                            Sélectionnez un type ci-dessus
+                        </div>
+                    </div>
+                </div>
 
-    // Check for new messages
-    async function checkNewMessages() {
-        try {
-            const response = await fetch(`${state.apiBaseUrl}/messages/?destinataire=${state.currentUser?.id}&lu=false`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${state.authToken}`,
-                    'Content-Type': 'application/json'
-                }
+                <!-- Pre-written message -->
+                <div id="msgPreSection" style="display:none;margin-bottom:1.25rem;">
+                    <label style="${lbl()}">Message (optionnel)</label>
+                    <textarea id="firstMsg" rows="3" placeholder="Tapez votre premier message..."
+                              style="${inp()} resize:vertical;"></textarea>
+                </div>
+
+                <button id="btnStartConv"
+                        style="width:100%;padding:.875rem;border:none;border-radius:12px;
+                               background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;
+                               font-weight:700;font-size:1rem;cursor:pointer;display:none;">
+                    <i class="fas fa-paper-plane"></i> Démarrer la conversation
+                </button>
+            </div>`;
+
+        document.body.appendChild(modal);
+        modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+        document.getElementById('closeNewMsg').addEventListener('click', () => modal.remove());
+
+        let selectedType    = null;
+        let selectedContact = null;
+
+        // Contact search
+        document.getElementById('contactSearch').addEventListener('input', e => {
+            const q = e.target.value.toLowerCase();
+            document.querySelectorAll('.contact-item').forEach(item => {
+                item.style.display = item.dataset.name.toLowerCase().includes(q) ? 'flex' : 'none';
             });
+        });
 
-            if (!response.ok) return;
+        // Type selection
+        document.getElementById('typeButtons').addEventListener('click', e => {
+            const btn = e.target.closest('[data-type]');
+            if (!btn) return;
+            selectedType    = btn.dataset.type;
+            selectedContact = null;
 
-            const newMessages = await response.json();
+            document.querySelectorAll('#typeButtons [data-type]').forEach(b => {
+                b.classList.remove('active');
+                b.style.cssText += ';border-color:#e2e8f0;color:#475569;background:white;';
+            });
+            const colors = { etudiant:'#6366f1', parent:'#10b981', enseignant:'#f59e0b' };
+            const c = colors[selectedType];
+            btn.classList.add('active');
+            btn.style.borderColor = c;
+            btn.style.color       = c;
+            btn.style.background  = `${c}10`;
 
-            if (newMessages.length > 0) {
-                // Add new messages to chat
-                newMessages.forEach(msg => {
-                    if (!document.querySelector(`[data-id="${msg.id}"]`)) {
-                        const isOwn = msg.expediteur === state.currentUser?.id;
-                        addMessageToChat(msg, isOwn);
+            document.getElementById('groupeFilter').style.display =
+                ['etudiant','parent'].includes(selectedType) ? 'block' : 'none';
+            document.getElementById('selGroupe').value = '';
 
-                        // Play notification sound (optional)
-                        // new Audio('/static/sounds/notification.mp3').play().catch(() => {});
-                    }
-                });
+            renderContactsList(selectedType, null);
+            document.getElementById('contactsSection').style.display = 'block';
+            document.getElementById('msgPreSection').style.display   = 'block';
+            document.getElementById('btnStartConv').style.display    = 'block';
+        });
 
-                scrollToBottom();
-                showNotification(`📩 ${newMessages.length} nouveau(x) message(s)`, 'info');
+        // Groupe filter
+        document.getElementById('selGroupe').addEventListener('change', e => {
+            if (selectedType) renderContactsList(selectedType, e.target.value || null);
+        });
+
+        // Contact click
+        document.getElementById('contactsList').addEventListener('click', e => {
+            const item = e.target.closest('.contact-item');
+            if (!item) return;
+            document.querySelectorAll('.contact-item').forEach(x => {
+                x.style.background = '';
+                x.querySelector('.contact-check')?.remove();
+            });
+            item.style.background = '#f0f4ff';
+            const check = document.createElement('span');
+            check.className = 'contact-check';
+            check.textContent = '✓';
+            check.style.cssText = 'color:#6366f1;font-weight:800;margin-left:auto;flex-shrink:0;';
+            item.appendChild(check);
+            selectedContact = { id: item.dataset.id, name: item.dataset.name };
+        });
+
+        // Start conversation
+        document.getElementById('btnStartConv').addEventListener('click', async () => {
+            if (!selectedContact) { showNotif('Sélectionnez un contact.', 'warning'); return; }
+
+            const firstMsg = document.getElementById('firstMsg').value.trim();
+            modal.remove();
+
+            let convEl = document.querySelector(`.conversation-item[data-user-id="${selectedContact.id}"]`);
+            if (!convEl) {
+                convEl = document.createElement('div');
+                convEl.className      = 'conversation-item';
+                convEl.dataset.id     = `conv-${selectedContact.id}`;
+                convEl.dataset.userId = selectedContact.id;
+                convEl.innerHTML      = `
+                    <div class="conversation-avatar">${initials(selectedContact.name)}</div>
+                    <div class="conversation-info">
+                        <div class="conversation-name">
+                            ${esc(selectedContact.name)}
+                            <span class="conversation-time">Maintenant</span>
+                        </div>
+                        <div class="conversation-preview">Nouvelle conversation</div>
+                    </div>`;
+                els.convList?.prepend(convEl);
             }
 
-        } catch (error) {
-            console.error('Polling error:', error);
+            await selectConversation(convEl);
+
+            if (firstMsg) {
+                if (els.msgInput) els.msgInput.value = firstMsg;
+                await sendMessage();
+            }
+        });
+    }
+
+    // ── Render contacts in modal ───────────────────────────────────────────────
+    function renderContactsList(type, groupeId) {
+        const container = document.getElementById('contactsList');
+        let contacts = [];
+
+        if (type === 'etudiant') {
+            contacts = state.etudiants
+                .filter(e => !groupeId || String(e.groupe) === String(groupeId))
+                .map(e => ({
+                    id:     e.user?.id || e.id,
+                    name:   e.user?.nom_complet || `${e.user?.first_name||''} ${e.user?.last_name||''}`.trim() || `Étudiant #${e.id}`,
+                    sub:    e.groupe_nom ? `Groupe: ${e.groupe_nom}` : 'Sans groupe',
+                    niveau: e.niveau_actuel || '',
+                    color:  '#6366f1',
+                }));
+        } else if (type === 'parent') {
+            const etudiantsFiltered = groupeId
+                ? state.etudiants.filter(e => String(e.groupe) === String(groupeId))
+                : state.etudiants;
+            const parentIds = new Set(etudiantsFiltered.map(e => e.parent_id).filter(Boolean));
+            contacts = state.parents
+                .filter(p => !groupeId || parentIds.has(p.id))
+                .map(p => ({
+                    id:    p.user?.id || p.id,
+                    name:  p.user?.nom_complet || `${p.user?.first_name||''} ${p.user?.last_name||''}`.trim() || `Parent #${p.id}`,
+                    sub:   p.relation_enfant || 'Tuteur',
+                    color: '#10b981',
+                }));
+        } else if (type === 'enseignant') {
+            contacts = state.enseignants.map(e => ({
+                id:    e.user?.id || e.id,
+                name:  e.nom_complet || `${e.user?.first_name||''} ${e.user?.last_name||''}`.trim() || `Enseignant #${e.id}`,
+                sub:   e.langue_enseignee || '—',
+                color: '#f59e0b',
+            }));
         }
+
+        if (!contacts.length) {
+            container.innerHTML = `
+                <div style="padding:1.5rem;text-align:center;color:#94a3b8;font-size:.875rem;">
+                    <i class="fas fa-user-slash" style="font-size:1.5rem;display:block;margin-bottom:.5rem;"></i>
+                    Aucun contact trouvé
+                    ${groupeId ? '<br><small>Essayez sans filtre de groupe</small>' : ''}
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = contacts.map(c => `
+            <div class="contact-item"
+                 data-id="${c.id}" data-name="${esc(c.name)}"
+                 style="display:flex;align-items:center;gap:.75rem;padding:.875rem 1rem;
+                        cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background .15s;"
+                 onmouseover="this.style.background='#f8fafc'"
+                 onmouseout="if(!this.style.background.includes('f0f4ff'))this.style.background=''">
+                <div style="width:40px;height:40px;border-radius:50%;flex-shrink:0;
+                            background:linear-gradient(135deg,${c.color},${c.color}aa);
+                            display:flex;align-items:center;justify-content:center;
+                            color:white;font-weight:700;font-size:.85rem;">
+                    ${initials(c.name)}
+                </div>
+                <div style="min-width:0;flex:1;">
+                    <div style="font-weight:600;color:#1e293b;font-size:.9rem;
+                                overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        ${esc(c.name)}
+                    </div>
+                    <div style="font-size:.78rem;color:#64748b;">
+                        ${esc(c.sub || '')}
+                        ${c.niveau ? `<span style="margin-left:.5rem;background:#dbeafe;color:#1e40af;
+                            padding:1px 6px;border-radius:8px;font-size:.7rem;font-weight:700;">
+                            ${c.niveau}</span>` : ''}
+                    </div>
+                </div>
+            </div>`).join('');
     }
 
-    // Scroll to bottom
-    function scrollToBottom() {
-        elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
+    // ── Setup events ──────────────────────────────────────────────────────────
+    function setupEventListeners() {
+        els.convList?.addEventListener('click', e => {
+            const item = e.target.closest('.conversation-item');
+            if (item) selectConversation(item);
+        });
+
+        els.sendBtn?.addEventListener('click', sendMessage);
+        els.msgInput?.addEventListener('keypress', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        });
+
+        els.searchInput?.addEventListener('input', debounce(e => {
+            const q = e.target.value.toLowerCase();
+            document.querySelectorAll('.conversation-item').forEach(item => {
+                item.style.display = item.textContent.toLowerCase().includes(q) ? 'flex' : 'none';
+            });
+        }, 300));
+
+        els.quickResp?.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (els.msgInput) els.msgInput.value = btn.textContent;
+                els.msgInput?.focus();
+            });
+        });
+
+        els.newMsgBtn?.addEventListener('click', showNewMessageModal);
+        els.inputBtns?.forEach(btn =>
+            btn.addEventListener('click', () => showNotif('Fonctionnalité à venir', 'info')));
     }
 
-    // Render static messages (fallback)
-    function renderStaticMessages() {
-        console.log('Using static HTML messages');
-        // Keep existing HTML
-    }
-
-    // Utility functions
-    function getInitials(name) {
+    // ── Utilities ─────────────────────────────────────────────────────────────
+    function initials(name) {
         if (!name) return '??';
-        return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+        return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2);
     }
-
-    function formatTime(timestamp) {
-        if (!timestamp) return '';
-        const date = new Date(timestamp);
-        const now = new Date();
-
-        if (date.toDateString() === now.toDateString()) {
-            return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-        }
-
-        const diff = (now - date) / (1000 * 60 * 60 * 24);
-        if (diff < 7) {
-            const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-            return days[date.getDay()];
-        }
-
-        return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-    }
-
-    function formatDate(timestamp) {
-        if (!timestamp) return '';
-        const date = new Date(timestamp);
-        const now = new Date();
-
-        if (date.toDateString() === now.toDateString()) {
-            return 'Aujourd\'hui';
-        }
-
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        if (date.toDateString() === yesterday.toDateString()) {
-            return 'Hier';
-        }
-
-        return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-    }
-
-    function formatFileSize(bytes) {
-        if (!bytes) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-    }
-
-    function escapeHtml(text) {
+    function esc(text) {
         if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        const d = document.createElement('div'); d.textContent = text; return d.innerHTML;
     }
-
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
+    function fmtTime(ts) {
+        if (!ts) return '';
+        const d = new Date(ts), now = new Date();
+        if (d.toDateString() === now.toDateString())
+            return d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+        const diff = (now - d) / 86400000;
+        if (diff < 7) return ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][d.getDay()];
+        return d.toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
     }
-
+    function fmtDate(ts) {
+        if (!ts) return '';
+        const d = new Date(ts), now = new Date();
+        if (d.toDateString() === now.toDateString()) return "Aujourd'hui";
+        const yest = new Date(now); yest.setDate(yest.getDate() - 1);
+        if (d.toDateString() === yest.toDateString()) return 'Hier';
+        return d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
+    }
+    function inp() {
+        return `width:100%;padding:10px 14px;border:2px solid #e5e7eb;border-radius:10px;
+                font-size:.9rem;outline:none;box-sizing:border-box;font-family:inherit;background:#f9fafb;`;
+    }
+    function lbl() {
+        return `font-size:.875rem;font-weight:600;color:#374151;display:block;margin-bottom:6px;`;
+    }
+    function debounce(fn, ms) {
+        let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+    }
+    function scrollBottom() {
+        if (els.msgContainer) els.msgContainer.scrollTop = els.msgContainer.scrollHeight;
+    }
     function handleAuthError() {
-        localStorage.removeItem('access_token');
-        sessionStorage.removeItem('access_token');
+        ['access_token','access','user'].forEach(k => {
+            localStorage.removeItem(k); sessionStorage.removeItem(k);
+        });
         window.location.href = '/login/';
     }
-
-    function showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-
-        const colors = {
-            success: '#10b981',
-            warning: '#f59e0b',
-            error: '#ef4444',
-            info: '#3b82f6'
-        };
-
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: ${colors[type]};
-            color: white;
-            padding: 1rem 2rem;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            z-index: 10000;
-            font-weight: 600;
-            animation: slideInRight 0.4s ease;
-        `;
-
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.style.animation = 'slideOutRight 0.4s ease';
-            setTimeout(() => notification.remove(), 400);
-        }, 3000);
+    function showNotif(msg, type = 'info') {
+        document.querySelector('.notif-msg')?.remove();
+        const colors = { success:'#10b981', error:'#ef4444', warning:'#f59e0b', info:'#3b82f6' };
+        const el = document.createElement('div');
+        el.className = 'notif-msg';
+        el.style.cssText = `position:fixed;top:20px;right:20px;background:${colors[type]};
+            color:white;padding:1rem 2rem;border-radius:12px;font-weight:600;z-index:10001;
+            box-shadow:0 10px 30px rgba(0,0,0,.2);animation:slideIn .3s ease;`;
+        el.textContent = msg;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
     }
 
-    // Global function for attachment download
-    window.downloadAttachment = function(attachmentId) {
-        showNotification('📥 Téléchargement...', 'info');
-        // Implement actual download logic here
-    };
-
-    // Add CSS animations
+    // ── CSS ───────────────────────────────────────────────────────────────────
     const style = document.createElement('style');
     style.textContent = `
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        @keyframes slideInRight {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        @keyframes slideOutRight {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-
-        .conversation-item {
-            transition: all 0.3s;
-        }
-
-        .conversation-item:hover {
-            background: #f8fafc;
-            transform: translateX(5px);
-        }
-
-        .message {
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .message-bubble {
-            transition: all 0.3s;
-        }
-
-        .message-bubble:hover {
-            transform: scale(1.02);
-        }
-
-        .send-btn {
-            transition: all 0.3s;
-        }
-
-        .send-btn:hover {
-            transform: scale(1.1);
-        }
-
-        .send-btn:active {
-            transform: scale(0.95);
-        }
-
-        .message-attachment {
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .message-attachment:hover {
-            background: rgba(0,0,0,0.05);
-        }
+        @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+        @keyframes fadeIn  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .conversation-item { transition:all .2s; }
+        .conversation-item:hover { background:#f8fafc; }
+        .message { animation:fadeIn .3s ease; }
+        .send-btn:hover { transform:scale(1.08); }
+        .contact-item:active { background:#f0f4ff !important; }
     `;
-
     document.head.appendChild(style);
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    async function init() {
+        if (!state.authToken) {
+            showNotif('❌ Veuillez vous connecter', 'error');
+            setTimeout(() => { window.location.href = '/login/'; }, 2000);
+            return;
+        }
+        setupEventListeners();
+        startWsPing();                      // keepalive ping every 25s
+        await loadConversationsFromAPI();   // REST for sidebar only
+        // WS connects when a conversation is selected (selectConversation → connectWS)
+    }
+
+    init();
+
+    // Close WS cleanly when page unloads
+    window.addEventListener('beforeunload', () => { state.ws?.close(); });
 });

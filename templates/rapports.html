@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapports - Dashboard Dirigeant</title>
+      <!-- LINK CSS -->
+    <link rel="stylesheet" href="{% static 'css/rapports.css' %}">
+
+<body>
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-72 glass-panel flex flex-col">
+            <div class="p-6 border-b">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #6366f1, #9333ea);">
+                        <i class="fas fa-graduation-cap text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-white">LanguePro</h1>
+                        <p class="text-xs text-slate-400">Espace Dirigeant</p>
+                    </div>
+                </div>
+            </div>
+            <nav class="flex-1 py-6 px-3 space-y-4">
+                                <a href="{% url 'dashboard_dirigeant' %}" class="sidebar-link"><i class="fas fa-chart-line"></i>Tableau de Bord</a>
+                 <a href="{% url 'audit' %}" class="sidebar-link "><i class="fas fa-history text-indigo-400"></i>Audit & Logs</a>
+                <a href="{% url 'utilisateurs' %}" class="sidebar-link"><i class="fas fa-chalkboard-teacher"></i>utilisateur</a>
+                 <a href="{% url 'rapports' %}" class="sidebar-link active">
+                    <i class="fas fa-file-alt"></i>
+                    Rapport
+                </a>
+                
+                <a href="{% url 'finance' %}" class="sidebar-link"><i class="fas fa-wallet"></i>Finances</a>
+                  <a href="{% url 'parametres' %}" class="sidebar-link">
+                    <i class="fas fa-cog"></i>
+                    Paramètres
+                </a>
+                <a href="#" class="sidebar-link logout-link">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Déconnexion
+                </a>
+            </nav>
+            <div class="p-4 border-t">
+                <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50">
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff" class="w-10 h-10 rounded-full">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-white truncate">Directeur</p>
+                        <p class="text-xs text-slate-400 truncate">dirigeant@languepro.com</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto bg-slate-900">
+            <header class="sticky top-0 z-20 glass-panel border-b px-8 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Rapports & Statistiques</h2>
+                        <p class="text-sm text-slate-400">Génération et export de données</p>
+                    </div>
+                </div>
+            </header>
+
+            <div class="p-8 space-y-6">
+                <!-- Date Filter -->
+                <div class="glass-panel p-4">
+                    <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm text-slate-400">Du</span>
+                                <input type="date" class="date-input" value="2026-04-01">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm text-slate-400">Au</span>
+                                <input type="date" class="date-input" value="2026-04-13">
+                            </div>
+                            <button class="btn-secondary"><i class="fas fa-filter mr-2"></i>Appliquer</button>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="btn-secondary"><i class="fas fa-calendar mr-2"></i>Ce mois</button>
+                            <button class="btn-secondary"><i class="fas fa-calendar-alt mr-2"></i>Ce trimestre</button>
+                            <button class="btn-secondary"><i class="fas fa-calendar-check mr-2"></i>Cette année</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Report Categories -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Financial Reports -->
+                    <div class="report-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                                <i class="fas fa-euro-sign text-emerald-400 text-xl"></i>
+                            </div>
+                            <span class="format-badge format-pdf">PDF</span>
+                        </div>
+                        <h3 class="font-semibold text-white mb-2">Rapport Financier</h3>
+                        <p class="text-sm text-slate-400 mb-4">Revenus, dépenses, soldes et tendances</p>
+                        <div class="space-y-2 mb-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Chiffre d'affaires</span>
+                                <span class="text-white font-medium">45,280 €</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Bénéfice net</span>
+                                <span class="text-emerald-400 font-medium">+12,450 €</span>
+                            </div>
+                        </div>
+                        <button class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer text-white">
+                            <i class="fas fa-download mr-2"></i>Télécharger
+                        </button>
+                    </div>
+
+                    <!-- Students Report -->
+                    <div class="report-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                                <i class="fas fa-user-graduate text-blue-400 text-xl"></i>
+                            </div>
+                            <span class="format-badge format-excel">Excel</span>
+                        </div>
+                        <h3 class="font-semibold text-white mb-2">Rapport Étudiants</h3>
+                        <p class="text-sm text-slate-400 mb-4">Inscriptions, niveaux, réussite et abandon</p>
+                        <div class="space-y-2 mb-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Total inscrits</span>
+                                <span class="text-white font-medium">248</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Taux réussite</span>
+                                <span class="text-emerald-400 font-medium">87.3%</span>
+                            </div>
+                        </div>
+                        <button class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer text-white">
+                            <i class="fas fa-download mr-2"></i>Télécharger
+                        </button>
+                    </div>
+
+                    <!-- Teachers Report -->
+                    <div class="report-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                                <i class="fas fa-chalkboard-teacher text-purple-400 text-xl"></i>
+                            </div>
+                            <span class="format-badge format-pdf">PDF</span>
+                        </div>
+                        <h3 class="font-semibold text-white mb-2">Rapport Enseignants</h3>
+                        <p class="text-sm text-slate-400 mb-4">Heures, salaires, évaluations et performance</p>
+                        <div class="space-y-2 mb-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Heures totales</span>
+                                <span class="text-white font-medium">342h</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Masse salariale</span>
+                                <span class="text-white font-medium">12,840 €</span>
+                            </div>
+                        </div>
+                        <button class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer text-white">
+                            <i class="fas fa-download mr-2"></i>Télécharger
+                        </button>
+                    </div>
+
+                    <!-- Attendance Report -->
+                    <div class="report-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                                <i class="fas fa-clock text-amber-400 text-xl"></i>
+                            </div>
+                            <span class="format-badge format-csv">CSV</span>
+                        </div>
+                        <h3 class="font-semibold text-white mb-2">Rapport d'Assiduité</h3>
+                        <p class="text-sm text-slate-400 mb-4">Présences, absences, retards par groupe</p>
+                        <div class="space-y-2 mb-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Taux présence</span>
+                                <span class="text-emerald-400 font-medium">91.7%</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Absences</span>
+                                <span class="text-red-400 font-medium">23</span>
+                            </div>
+                        </div>
+                        <button class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer text-white">
+                            <i class="fas fa-download mr-2"></i>Télécharger
+                        </button>
+                    </div>
+
+                    <!-- Payments Report -->
+                    <div class="report-card">
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
+                                <i class="fas fa-credit-card text-red-400 text-xl"></i>
+                            </div>
+                            <span class="format-badge format-excel">Excel</span>
+                        </div>
+                        <h3 class="font-semibold text-white mb-2">Rapport Paiements</h3>
+                        <p class="text-sm text-slate-400 mb-4">Encaissements, impayés, relances</p>
+                        <div class="space-y-2 mb-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Payés</span>
+                                <span class="text-emerald-400 font-medium">89%</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">En retard</span>
+                                <span class="text-red-400 font-medium">8,450 €</span>
+                            </div>
+                        </div>
+                        <button class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer text-white">
+                            <i class="fas fa-download mr-2"></i>Télécharger
+                        </button>
+                    </div>
+
+                    <!-- Custom Report -->
+                    <div class="report-card" style="border-style: dashed; border-color: #4f46e5;">
+                        <div class="flex flex-col items-center justify-center h-full text-center">
+                            <div class="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center mb-4">
+                                <i class="fas fa-plus text-indigo-400 text-xl"></i>
+                            </div>
+                            <h3 class="font-semibold text-white mb-2">Rapport Personnalisé</h3>
+                            <p class="text-sm text-slate-400 mb-4">Créez un rapport sur mesure</p>
+                            <button class="w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-medium transition-colors border-none cursor-pointer text-white">
+                                Configurer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Reports History -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold text-white mb-6">Historique des Rapports Générés</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between p-4 bg-slate-800 rounded-lg">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                    <i class="fas fa-file-excel text-emerald-400"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium text-white">Rapport Financier - Mars 2026</h4>
+                                    <p class="text-sm text-slate-400">Généré par Karim Alaoui • 01/04/2026 à 09:30</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-slate-500">2.4 MB</span>
+                                <button class="p-2 hover:bg-slate-700 rounded-lg transition-colors border-none cursor-pointer text-slate-400">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button class="p-2 hover:bg-slate-700 rounded-lg transition-colors border-none cursor-pointer text-slate-400">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-4 bg-slate-800 rounded-lg">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                                    <i class="fas fa-file-pdf text-red-400"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium text-white">Liste Enseignants - Trimestre 1</h4>
+                                    <p class="text-sm text-slate-400">Généré par Vous • 28/03/2026 à 14:15</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-slate-500">1.8 MB</span>
+                                <button class="p-2 hover:bg-slate-700 rounded-lg transition-colors border-none cursor-pointer text-slate-400">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button class="p-2 hover:bg-slate-700 rounded-lg transition-colors border-none cursor-pointer text-slate-400">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between p-4 bg-slate-800 rounded-lg">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                    <i class="fas fa-file-csv text-blue-400"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium text-white">Export Absences - Février 2026</h4>
+                                    <p class="text-sm text-slate-400">Généré par Marie Dupont • 05/03/2026 à 11:20</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-slate-500">856 KB</span>
+                                <button class="p-2 hover:bg-slate-700 rounded-lg transition-colors border-none cursor-pointer text-slate-400">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button class="p-2 hover:bg-slate-700 rounded-lg transition-colors border-none cursor-pointer text-slate-400">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scheduled Reports -->
+                <div class="glass-panel p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-semibold text-white">Rapports Programmés</h3>
+                        <button class="btn-secondary"><i class="fas fa-plus mr-2"></i>Nouveau</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="p-4 bg-slate-800 rounded-lg flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                                    <i class="fas fa-calendar-check text-indigo-400"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium text-white">Rapport Mensuel Financier</h4>
+                                    <p class="text-sm text-slate-400">Tous les 1er du mois • PDF</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-1 rounded text-xs bg-emerald-500/20 text-emerald-400">Actif</span>
+                                <button class="p-2 hover:bg-slate-700 rounded-lg transition-colors border-none cursor-pointer text-slate-400">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="p-4 bg-slate-800 rounded-lg flex items-center justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                                    <i class="fas fa-calendar-check text-indigo-400"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-medium text-white">Rapport Hebdomadaire Absences</h4>
+                                    <p class="text-sm text-slate-400">Tous les lundis • Excel</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-1 rounded text-xs bg-emerald-500/20 text-emerald-400">Actif</span>
+                                <button class="p-2 hover:bg-slate-700 rounded-lg transition-colors border-none cursor-pointer text-slate-400">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+     <script src="{% static 'js/rapports.js' %}"></script>
+</body>
+</html>

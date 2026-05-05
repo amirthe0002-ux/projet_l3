@@ -21,6 +21,7 @@ urlpatterns = [
 
     # Home
     path('', home, name='home'),
+   
 
     # ============================================================
     # AUTH
@@ -43,7 +44,7 @@ urlpatterns = [
     # ============================================================
     path('enseignants/', views.EnseignantListCreateView.as_view(), name='enseignant_list'),
     path('enseignants/<int:pk>/', views.EnseignantDetailView.as_view(), name='enseignant_detail'),
-
+#S
     # ============================================================
     # SECRÉTARIAT — Parents
     # ============================================================
@@ -134,6 +135,16 @@ urlpatterns = [
     # ============================================================
     path('audit/', views.AuditListView.as_view(), name='audit_list'),
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
+
+    # ============================================================
+    # UTILISATEUR DETAIL (admin field updates)
+    # ============================================================
+   # ADD this line — it's missing entirely
+path('utilisateurs/', views.UtilisateurListView.as_view(), name='utilisateur_list'),
+
+# This one already exists — keep it
+path('utilisateurs/<int:pk>/', views.UtilisateurDetailView.as_view()),
+   
 ]
 
 # ✅ Add static/media ONLY in debug

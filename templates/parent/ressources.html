@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mes Ressources - Espace Étudiant</title>
+    <link rel="stylesheet" href="{% static 'css/ressources_parent.css' %}">
+<script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=g7QNsmfrck_j85vuDemAzqCCaqwYs2JWvA7HANXLffsGgoLGhbTFQw9BanIBrs2ovF_PUfcJLcNYaeDYs66ayRvJejlYSWKeO_PJXPUObAHvUamaipWDh9Lvhw22-W2kXMRF0kyuPznSXnBXns4F7A8GhfBw6q4ARWbvV6ro1g1khqh8xk09uVv4Uer9mu0M8DodaoWU67bkcSLMnn3GNauCXYOOKMV3uxnhMg8dQ5SyW4woaDEe2WOVUVUifC1X-LOuhV_NC1boX6_dX7qEew" charset="UTF-8"></script><link rel="stylesheet" crossorigin="anonymous" href="https://gc.kis.v2.scr.kaspersky-labs.com/E3E8934C-235A-4B0E-825A-35A08381A191/abn/main.css?attr=aHR0cHM6Ly9jZG4uZGlzY29yZGFwcC5jb20vYXR0YWNobWVudHMvMTQ3NzA3OTY0ODU0MTA4NTcwMS8xNDk2MjA2NzI3OTEyMjI2OTg2L3Jlc3NvdXJjZXMuaHRtbD9leD02OWU5MGE5YSZpcz02OWU3YjkxYSZobT05NjI2MTYwYWY1M2RlNzY1OGMzYzE4ZWEyNDJkMjNlNzg4MGY1MTczM2VmODgwZDRmMmRmZmRmYzI3YTMxNTA4Jg"/></head>
+<body>
+    <div class="container">
+        <a href="{% url 'dashboard_parent'%}" class="back-btn">← Retour au Tableau de Bord</a>
+
+        <div class="header">
+            <h1>📁 Mes Ressources</h1>
+            <p>Accédez à tous vos cours, exercices et supports pédagogiques</p>
+        </div>
+
+        <div class="controls">
+            <div class="search-bar">
+                <div class="search-input">
+                    <span>🔍</span>
+                    <input type="text" placeholder="Rechercher une ressource...">
+                </div>
+                <select class="filter-dropdown">
+                    <option>Toutes les matières</option>
+                    <option>Anglais B1</option>
+                    <option>Espagnol A2</option>
+                    <option>Grammaire</option>
+                    <option>Conversation</option>
+                </select>
+                <select class="filter-dropdown">
+                    <option>Tous les types</option>
+                    <option>PDF</option>
+                    <option>Vidéo</option>
+                    <option>Audio</option>
+                    <option>Présentation</option>
+                </select>
+            </div>
+
+            <div class="category-filters">
+                <button class="category-btn active">
+                    <span>📋</span> Toutes
+                </button>
+                <button class="category-btn">
+                    <span>📄</span> Cours PDF
+                </button>
+                <button class="category-btn">
+                    <span>🎥</span> Vidéos
+                </button>
+                <button class="category-btn">
+                    <span>🎵</span> Audio
+                </button>
+                <button class="category-btn">
+                    <span>📊</span> Présentations
+                </button>
+                <button class="category-btn">
+                    <span>📝</span> Exercices
+                </button>
+                <button class="category-btn">
+                    <span>📚</span> Examens blancs
+                </button>
+            </div>
+        </div>
+
+        <div class="resources-section">
+            <div class="section-header">
+                <h2 class="section-title">📌 Ressources Récentes</h2>
+                <div class="view-toggle">
+                    <button class="view-btn active">Grille</button>
+                    <button class="view-btn">Liste</button>
+                </div>
+            </div>
+
+            <div class="resources-grid">
+                <div class="resource-card">
+                    <div class="resource-preview preview-pdf">
+                        📄
+                        <span class="resource-type-badge">PDF</span>
+                    </div>
+                    <div class="resource-info">
+                        <h3 class="resource-title">Cours complet - Les temps du passé en anglais</h3>
+                        <div class="resource-meta">
+                            <span class="meta-item">📅 20 Mars 2024</span>
+                            <span class="meta-item">💾 2.4 MB</span>
+                            <span class="meta-item">👁️ 45 vues</span>
+                        </div>
+                        <div class="resource-tags">
+                            <span class="tag">Anglais B1</span>
+                            <span class="tag">Grammaire</span>
+                            <span class="tag important">Important</span>
+                        </div>
+                        <div class="resource-actions">
+                            <button class="action-btn primary">📥 Télécharger</button>
+                            <button class="action-btn">👁️ Aperçu</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="resource-card">
+                    <div class="resource-preview preview-video">
+                        🎥
+                        <span class="resource-type-badge">MP4</span>
+                    </div>
+                    <div class="resource-info">
+                        <h3 class="resource-title">Video - Présentation orale en public</h3>
+                        <div class="resource-meta">
+                            <span class="meta-item">📅 18 Mars 2024</span>
+                            <span class="meta-item">⏱️ 15:30</span>
+                            <span class="meta-item">👁️ 128 vues</span>
+                        </div>
+                        <div class="resource-tags">
+                            <span class="tag">Expression orale</span>
+                            <span class="tag">B1</span>
+                        </div>
+                        <div class="resource-actions">
+                            <button class="action-btn primary">▶️ Regarder</button>
+                            <button class="action-btn">💾 Offline</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="resource-card">
+                    <div class="resource-preview preview-audio">
+                        🎵
+                        <span class="resource-type-badge">MP3</span>
+                    </div>
+                    <div class="resource-info">
+                        <h3 class="resource-title">Exercice de listening - Accent britannique</h3>
+                        <div class="resource-meta">
+                            <span class="meta-item">📅 15 Mars 2024</span>
+                            <span class="meta-item">⏱️ 8:45</span>
+                            <span class="meta-item">👁️ 89 vues</span>
+                        </div>
+                        <div class="resource-tags">
+                            <span class="tag">Compréhension</span>
+                            <span class="tag">Audio</span>
+                        </div>
+                        <div class="resource-actions">
+                            <button class="action-btn primary">▶️ Écouter</button>
+                            <button class="action-btn">📝 Transcription</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="resource-card">
+                    <div class="resource-preview preview-ppt">
+                        📊
+                        <span class="resource-type-badge">PPT</span>
+                    </div>
+                    <div class="resource-info">
+                        <h3 class="resource-title">Présentation - Vocabulaire du travail</h3>
+                        <div class="resource-meta">
+                            <span class="meta-item">📅 12 Mars 2024</span>
+                            <span class="meta-item">💾 5.1 MB</span>
+                            <span class="meta-item">👁️ 67 vues</span>
+                        </div>
+                        <div class="resource-tags">
+                            <span class="tag">Vocabulaire</span>
+                            <span class="tag">Professionnel</span>
+                        </div>
+                        <div class="resource-actions">
+                            <button class="action-btn primary">📥 Télécharger</button>
+                            <button class="action-btn">👁️ Voir</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="resource-card">
+                    <div class="resource-preview preview-excel">
+                        📝
+                        <span class="resource-type-badge">EXCEL</span>
+                    </div>
+                    <div class="resource-info">
+                        <h3 class="resource-title">Exercices - Verbes irréguliers</h3>
+                        <div class="resource-meta">
+                            <span class="meta-item">📅 10 Mars 2024</span>
+                            <span class="meta-item">💾 156 KB</span>
+                            <span class="meta-item">👁️ 203 vues</span>
+                        </div>
+                        <div class="resource-tags">
+                            <span class="tag">Exercices</span>
+                            <span class="tag">Grammaire</span>
+                            <span class="tag important">À faire</span>
+                        </div>
+                        <div class="resource-actions">
+                            <button class="action-btn primary">📥 Télécharger</button>
+                            <button class="action-btn">✏️ Remplir</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="resource-card">
+                    <div class="resource-preview preview-image">
+                        🖼️
+                        <span class="resource-type-badge">JPG</span>
+                    </div>
+                    <div class="resource-info">
+                        <h3 class="resource-title">Infographie - Phrasal verbs courants</h3>
+                        <div class="resource-meta">
+                            <span class="meta-item">📅 8 Mars 2024</span>
+                            <span class="meta-item">💾 890 KB</span>
+                            <span class="meta-item">👁️ 156 vues</span>
+                        </div>
+                        <div class="resource-tags">
+                            <span class="tag">Vocabulaire</span>
+                            <span class="tag">Infographie</span>
+                        </div>
+                        <div class="resource-actions">
+                            <button class="action-btn primary">👁️ Voir</button>
+                            <button class="action-btn">📥 Télécharger</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div class="recent-section">
+                <h2 class="section-title">🕐 Téléchargements Récents</h2>
+                <div class="download-list">
+                    <div class="download-item">
+                        <div class="download-icon">📄</div>
+                        <div class="download-info">
+                            <div class="download-title">Les temps du passé en anglais.pdf</div>
+                            <div class="download-meta">Téléchargé aujourd'hui à 14:30 • 2.4 MB</div>
+                        </div>
+                        <div class="download-status">
+                            <span>✓</span>
+                            <span>Terminé</span>
+                        </div>
+                    </div>
+                    <div class="download-item">
+                        <div class="download-icon">📊</div>
+                        <div class="download-info">
+                            <div class="download-title">Vocabulaire du travail.pptx</div>
+                            <div class="download-meta">Téléchargé hier à 18:15 • 5.1 MB</div>
+                        </div>
+                        <div class="download-status">
+                            <span>✓</span>
+                            <span>Terminé</span>
+                        </div>
+                    </div>
+                    <div class="download-item">
+                        <div class="download-icon">🎵</div>
+                        <div class="download-info">
+                            <div class="download-title">Listening accent britannique.mp3</div>
+                            <div class="download-meta">Téléchargé hier à 09:20 • 12.5 MB</div>
+                        </div>
+                        <div class="download-status">
+                            <span>✓</span>
+                            <span>Terminé</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="storage-card">
+                <div class="storage-header">
+                    <span class="storage-title">💾 Stockage Utilisé</span>
+                    <span class="storage-value">450 MB / 1 GB</span>
+                </div>
+                <div class="storage-bar">
+                    <div class="storage-fill"></div>
+                </div>
+                <div class="storage-legend">
+                    <div class="legend-item">
+                        <div class="legend-dot"></div>
+                        <span>Documents (45%)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot gray"></div>
+                        <span>Disponible (55%)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+<script src="{% static 'js/ressources_parent.js' %}"></script>
+</html>

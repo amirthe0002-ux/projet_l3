@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de Bord - Secrétaire</title>
+<link rel="stylesheet" href="{% static 'css/dash_secr.css' %}">
+<script src="{% static 'js/dash_scr.js'  %}"></script>
+</head>
+<body>
+
+<!-- ============ TOASTS ============ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ============ MODAL NOUVEAU PAIEMENT ============ -->
+<div class="modal-overlay" id="modalPaiement">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-money-bill-wave"></i> Nouveau Paiement</h3>
+            <button class="modal-close" onclick="closeModal('modalPaiement')">×</button>
+        </div>
+        <form id="formPaiement">
+            <div class="form-group">
+                <label>Étudiant</label>
+                <select id="paiement_etudiant" required>
+                    <option value="">-- Choisir un étudiant --</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Montant dû (DA)</label>
+                    <input type="number" id="paiement_du" placeholder="8000" required>
+                </div>
+                <div class="form-group">
+                    <label>Montant payé (DA)</label>
+                    <input type="number" id="paiement_paye" placeholder="8000" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Mode de paiement</label>
+                    <select id="paiement_mode" required>
+                        <option value="Especes">Espèces</option>
+                        <option value="Cheque">Chèque</option>
+                        <option value="Virement">Virement</option>
+                        <option value="Carte">Carte</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Période</label>
+                    <input type="text" id="paiement_periode" placeholder="Mars 2026">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Date de paiement</label>
+                <input type="date" id="paiement_date" required>
+            </div>
+            <button type="submit" class="btn-submit" id="btnSubmitPaiement">
+                <i class="fas fa-save"></i> Enregistrer le paiement
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- ============ MODAL NOUVEL ÉTUDIANT ============ -->
+<div class="modal-overlay" id="modalEtudiant">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-user-plus"></i> Nouvel Étudiant</h3>
+            <button class="modal-close" onclick="closeModal('modalEtudiant')">×</button>
+        </div>
+        <form id="formEtudiant">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Prénom</label>
+                    <input type="text" id="etudiant_prenom" placeholder="Ahmed" required>
+                </div>
+                <div class="form-group">
+                    <label>Nom</label>
+                    <input type="text" id="etudiant_nom" placeholder="Benali" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="etudiant_email" placeholder="ahmed@email.com" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Téléphone</label>
+                    <input type="text" id="etudiant_tel" placeholder="0555 123 456" required>
+                </div>
+                <div class="form-group">
+                    <label>Date de naissance</label>
+                    <input type="date" id="etudiant_naissance" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Groupe</label>
+                    <select id="etudiant_groupe">
+                        <option value="">-- Choisir --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Niveau initial</label>
+                    <select id="etudiant_niveau">
+                        <option value="A1">A1</option>
+                        <option value="A2">A2</option>
+                        <option value="B1">B1</option>
+                        <option value="B2">B2</option>
+                        <option value="C1">C1</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Mot de passe provisoire</label>
+                <input type="password" id="etudiant_pwd" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="btn-submit" id="btnSubmitEtudiant">
+                <i class="fas fa-save"></i> Inscrire l'étudiant
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- ============ SIDEBAR ============ -->
+<aside class="sidebar">
+    <div class="logo">
+        <div class="logo-icon"><i class="fas fa-user-tie"></i></div>
+        <div class="logo-text">
+            <h2>Secrétariat</h2>
+            <p>Centre de Langues</p>
+        </div>
+    </div>
+
+    <ul class="nav-menu">
+        <li class="nav-item active">
+            <a href="#"><i class="fas fa-home"></i><span>Tableau de Bord</span></a>
+        </li>
+        <li class="nav-item">
+            <a href="#"><i class="fas fa-money-bill-wave"></i><span>Gestion Financière</span></a>
+        </li>
+        <li class="nav-item">
+            <a href="#"><i class="fas fa-users"></i><span>Étudiants</span>
+                <span class="badge" id="badgeEtudiants">...</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="#"><i class="fas fa-chalkboard-teacher"></i><span>Enseignants</span></a>
+        </li>
+        <li class="nav-item">
+            <a href="#"><i class="fas fa-layer-group"></i><span>Groupes</span></a>
+        </li>
+        <li class="nav-item">
+            <a href="#"><i class="fas fa-calendar-alt"></i><span>Planning</span></a>
+        </li>
+        <li class="nav-item">
+            <a href="#"><i class="fas fa-file-invoice"></i><span>Factures</span></a>
+        </li>
+    </ul>
+
+    <div class="user-profile">
+        <div class="user-avatar" id="userAvatar">--</div>
+        <div class="user-info">
+            <h4 id="userName">Chargement...</h4>
+            <p id="userRole">Secrétaire</p>
+        </div>
+    </div>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<main class="main-content">
+    <div class="header">
+        <h1>Tableau de Bord</h1>
+        <div class="header-actions">
+            <button class="btn-icon" id="btnNotif" title="Notifications">
+                <i class="fas fa-bell"></i>
+                <span class="notif-dot" id="notifDot"></span>
+            </button>
+            <button class="btn-icon" title="Rafraîchir" onclick="loadAll()">
+                <i class="fas fa-sync-alt" id="refreshIcon"></i>
+            </button>
+            <button class="btn-icon" title="Déconnexion" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="dashboard-split">
+
+        <!-- LEFT: FINANCIER -->
+        <section class="section financial-section">
+            <div class="section-header">
+                <div class="section-title">
+                    <i class="fas fa-chart-line"></i>
+                    <div>
+                        <h2>Informations Financières</h2>
+                        <p>Suivi des paiements et revenus</p>
+                    </div>
+                </div>
+                <button class="btn-icon" style="background:white;" onclick="loadAll()">
+                    <i class="fas fa-redo"></i>
+                </button>
+            </div>
+
+            <div class="section-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon-small"><i class="fas fa-wallet"></i></div>
+                            <span class="stat-trend trend-up" id="trendRevenus">...</span>
+                        </div>
+                        <div class="stat-value" id="statRevenus">
+                            <span class="skeleton" style="width:100px;height:1.5rem;">&nbsp;</span>
+                        </div>
+                        <div class="stat-label">Revenus Collectés</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon-small"><i class="fas fa-exclamation-triangle"></i></div>
+                            <span class="stat-trend trend-down" id="trendImpayes">...</span>
+                        </div>
+                        <div class="stat-value" id="statImpayes">
+                            <span class="skeleton" style="width:80px;height:1.5rem;">&nbsp;</span>
+                        </div>
+                        <div class="stat-label">Montant Impayé</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon-small"><i class="fas fa-coins"></i></div>
+                            <span class="stat-trend" id="trendTaux">...</span>
+                        </div>
+                        <div class="stat-value" id="statTaux">
+                            <span class="skeleton" style="width:70px;height:1.5rem;">&nbsp;</span>
+                        </div>
+                        <div class="stat-label">Taux de Paiement</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon-small"><i class="fas fa-hand-holding-usd"></i></div>
+                            <span class="stat-trend trend-neutral">salaires</span>
+                        </div>
+                        <div class="stat-value" id="statSalaires">
+                            <span class="skeleton" style="width:90px;height:1.5rem;">&nbsp;</span>
+                        </div>
+                        <div class="stat-label">Salaires Versés</div>
+                    </div>
+                </div>
+
+                <div class="list-container">
+                    <div class="list-header">
+                        <h3><i class="fas fa-history"></i> Derniers Paiements</h3>
+                        <a href="#" class="btn-view-all">Voir tout →</a>
+                    </div>
+                    <div id="listePaiements">
+                        <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i> Chargement...
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <button class="quick-btn" onclick="openModal('modalPaiement')">
+                        <i class="fas fa-plus-circle"></i><span>Nouveau Paiement</span>
+                    </button>
+                    <button class="quick-btn" onclick="showToast('Fonctionnalité en développement', 'warning')">
+                        <i class="fas fa-file-invoice-dollar"></i><span>Générer Facture</span>
+                    </button>
+                    <button class="quick-btn" onclick="showToast('Fonctionnalité en développement', 'warning')">
+                        <i class="fas fa-chart-pie"></i><span>Rapport Mensuel</span>
+                    </button>
+                    <button class="quick-btn" onclick="showToast('Relances envoyées automatiquement', 'success')">
+                        <i class="fas fa-bell"></i><span>Relances Auto</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT: PERSONNEL -->
+        <section class="section personnel-section">
+            <div class="section-header">
+                <div class="section-title">
+                    <i class="fas fa-users-cog"></i>
+                    <div>
+                        <h2>Informations du Personnel</h2>
+                        <p>Gestion des employés et étudiants</p>
+                    </div>
+                </div>
+                <button class="btn-icon" style="background:white;" onclick="loadAll()">
+                    <i class="fas fa-redo"></i>
+                </button>
+            </div>
+
+            <div class="section-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon-small"><i class="fas fa-user-graduate"></i></div>
+                            <span class="stat-trend trend-up" id="trendEtudiants">...</span>
+                        </div>
+                        <div class="stat-value" id="statEtudiants">
+                            <span class="skeleton" style="width:50px;height:1.5rem;">&nbsp;</span>
+                        </div>
+                        <div class="stat-label">Étudiants Actifs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon-small"><i class="fas fa-chalkboard-teacher"></i></div>
+                            <span class="stat-trend trend-up" id="trendEnseignants">...</span>
+                        </div>
+                        <div class="stat-value" id="statEnseignants">
+                            <span class="skeleton" style="width:40px;height:1.5rem;">&nbsp;</span>
+                        </div>
+                        <div class="stat-label">Enseignants</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon-small"><i class="fas fa-layer-group"></i></div>
+                            <span class="stat-trend trend-up" id="trendGroupes">...</span>
+                        </div>
+                        <div class="stat-value" id="statGroupes">
+                            <span class="skeleton" style="width:40px;height:1.5rem;">&nbsp;</span>
+                        </div>
+                        <div class="stat-label">Groupes Actifs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon-small"><i class="fas fa-user-clock"></i></div>
+                            <span class="stat-trend trend-neutral">absences</span>
+                        </div>
+                        <div class="stat-value" id="statAbsences">
+                            <span class="skeleton" style="width:40px;height:1.5rem;">&nbsp;</span>
+                        </div>
+                        <div class="stat-label">Absences enregistrées</div>
+                    </div>
+                </div>
+
+                <div class="list-container">
+                    <div class="list-header">
+                        <h3><i class="fas fa-clock"></i> Derniers Étudiants Inscrits</h3>
+                        <a href="#" class="btn-view-all">Voir tout →</a>
+                    </div>
+                    <div id="listeEtudiants">
+                        <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i> Chargement...
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-actions">
+                    <button class="quick-btn" onclick="openModal('modalEtudiant')">
+                        <i class="fas fa-user-plus"></i><span>Nouvel Étudiant</span>
+                    </button>
+                    <button class="quick-btn" onclick="showToast('Fonctionnalité en développement', 'warning')">
+                        <i class="fas fa-user-tie"></i><span>Nouvel Enseignant</span>
+                    </button>
+                    <button class="quick-btn" onclick="showToast('Fonctionnalité en développement', 'warning')">
+                        <i class="fas fa-layer-group"></i><span>Créer Groupe</span>
+                    </button>
+                    <button class="quick-btn" onclick="showToast('Fonctionnalité en développement', 'warning')">
+                        <i class="fas fa-calendar-plus"></i><span>Planifier Cours</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</main>
+
+
+</body>
+</html>

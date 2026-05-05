@@ -1,0 +1,200 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paramètres - Dashboard Dirigeant</title>
+    <!-- Font Awesome was missing — required for all icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/Parametres.css' %}">
+    <!-- base target="_blank" removed — it breaks internal links like sidebar nav -->
+</head>
+<body>
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-72 glass-panel flex flex-col">
+            <div class="p-6 border-b">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #6366f1, #9333ea);">
+                        <i class="fas fa-graduation-cap text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-white">LanguePro</h1>
+                        <p class="text-xs text-slate-400">Espace Dirigeant</p>
+                    </div>
+                </div>
+            </div>
+            <nav class="flex-1 py-6 px-3 space-y-4">
+                <a href="{% url 'dashboard_dirigeant' %}" class="sidebar-link"><i class="fas fa-chart-line"></i>Tableau de Bord</a>
+                <a href="{% url 'audit' %}" class="sidebar-link"><i class="fas fa-history text-indigo-400"></i>Audit & Logs</a>
+                <a href="{% url 'utilisateurs' %}" class="sidebar-link"><i class="fas fa-chalkboard-teacher"></i>utilisateur</a>
+                <a href="{% url 'rapports' %}" class="sidebar-link"><i class="fas fa-file-alt"></i>Rapport</a>
+                <a href="{% url 'finance' %}" class="sidebar-link"><i class="fas fa-wallet"></i>Finances</a>
+                <a href="{% url 'parametres' %}" class="sidebar-link active"><i class="fas fa-cog"></i>Paramètres</a>
+                <a href="#" class="sidebar-link logout-link"><i class="fas fa-sign-out-alt"></i>Déconnexion</a>
+            </nav>
+            <div class="p-4 border-t">
+                <div class="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50">
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=6366f1&color=fff" class="w-10 h-10 rounded-full">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-white truncate">Directeur</p>
+                        <p class="text-xs text-slate-400 truncate">dirigeant@languepro.com</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto bg-slate-900">
+            <header class="sticky top-0 z-20 glass-panel border-b px-8 py-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Paramètres du Centre</h2>
+                        <p class="text-sm text-slate-400">Configuration générale de l'établissement</p>
+                    </div>
+                    <button class="btn-primary"><i class="fas fa-save mr-2"></i>Enregistrer</button>
+                </div>
+            </header>
+
+            <div class="p-8 space-y-6">
+                <!-- Tabs -->
+                <div class="glass-panel p-2 flex gap-2">
+                    <button class="tab-btn active">Informations</button>
+                    <button class="tab-btn">Langues & Niveaux</button>
+                    <button class="tab-btn">Tarifs</button>
+                    <button class="tab-btn">Notifications</button>
+                    <button class="tab-btn">Sécurité</button>
+                </div>
+
+                <!-- General Info -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold text-white mb-6">Informations du Centre</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="form-group">
+                            <label class="form-label">Nom de l'établissement</label>
+                            <input type="text" class="form-input" value="LanguePro Academy">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email principal</label>
+                            <input type="email" class="form-input" value="contact@languepro.com">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Téléphone</label>
+                            <input type="tel" class="form-input" value="+33 1 23 45 67 89">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Site web</label>
+                            <input type="url" class="form-input" value="https://www.languepro.com">
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label class="form-label">Adresse</label>
+                            <input type="text" class="form-input" value="123 Avenue des Langues, 75001 Paris">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Numéro SIRET</label>
+                            <input type="text" class="form-input" value="123 456 789 00012">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">TVA Intracommunautaire</label>
+                            <input type="text" class="form-input" value="FR12345678901">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Branding -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold text-white mb-6">Identité Visuelle</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label class="form-label">Logo du centre</label>
+                            <div class="upload-zone">
+                                <i class="fas fa-cloud-upload-alt text-3xl text-slate-500 mb-2"></i>
+                                <p class="text-sm text-slate-400">Glissez ou cliquez pour uploader</p>
+                                <p class="text-xs text-slate-500 mt-1">PNG, JPG (max 2MB)</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label">Couleur primaire</label>
+                            <div class="flex items-center gap-3">
+                                <input type="color" class="color-picker" value="#6366f1">
+                                <span class="text-sm text-slate-400">#6366f1</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label">Couleur secondaire</label>
+                            <div class="flex items-center gap-3">
+                                <input type="color" class="color-picker" value="#a855f7">
+                                <span class="text-sm text-slate-400">#a855f7</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Academic Settings -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold text-white mb-6">Paramètres Académiques</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="form-group">
+                            <label class="form-label">Seuil de réussite (note/20)</label>
+                            <input type="number" class="form-input" value="10" min="0" max="20">
+                            <p class="text-xs text-slate-500 mt-1">Moyenne minimale pour passer au niveau supérieur</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Nombre max d'absences</label>
+                            <input type="number" class="form-input" value="3" min="1">
+                            <p class="text-xs text-slate-500 mt-1">Alerte déclenchée après ce nombre d'absences</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Durée d'une séance (min)</label>
+                            <input type="number" class="form-input" value="90" step="15">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Capacité max par groupe</label>
+                            <input type="number" class="form-input" value="15" min="1" max="30">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Settings -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold text-white mb-6">Paramètres Système</h3>
+                    <div class="space-y-4">
+                        <div class="toggle-row">
+                            <div>
+                                <h4 class="font-medium text-white">Mode maintenance</h4>
+                                <p class="text-sm text-slate-400">Rendre l'application inaccessible aux utilisateurs</p>
+                            </div>
+                            <div class="toggle-switch"></div>
+                        </div>
+                        <div class="toggle-row">
+                            <div>
+                                <h4 class="font-medium text-white">Inscriptions ouvertes</h4>
+                                <p class="text-sm text-slate-400">Permettre aux nouveaux étudiants de s'inscrire</p>
+                            </div>
+                            <div class="toggle-switch active"></div>
+                        </div>
+                        <div class="toggle-row">
+                            <div>
+                                <h4 class="font-medium text-white">Backup automatique</h4>
+                                <p class="text-sm text-slate-400">Sauvegarde quotidienne à 02:00</p>
+                            </div>
+                            <div class="toggle-switch active"></div>
+                        </div>
+                        <div class="toggle-row">
+                            <div>
+                                <h4 class="font-medium text-white">Double authentification (2FA)</h4>
+                                <p class="text-sm text-slate-400">Obligatoire pour tous les utilisateurs</p>
+                            </div>
+                            <div class="toggle-switch"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Script at end of body so DOM is ready -->
+    <script src="{% static 'js/Parametres.js' %}"></script>
+</body>
+</html>
